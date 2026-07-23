@@ -302,8 +302,9 @@ const PROP_OVERRIDES: Record<string, { ax?: number; ay: number; scale: number; s
   'pine-0': { ax: 0.482, ay: 0.975, scale: 0.34, shadow: 0.32 },
   'pine-1': { ax: 0.491, ay: 0.964, scale: 0.36, shadow: 0.34 },
   'pine-2': { ax: 0.433, ay: 0.972, scale: 0.34, shadow: 0.32 },
-  'bush-0': { ay: 0.84, scale: 0.5 },
-  'bush-1': { ay: 0.84, scale: 0.5 },
+  // Photoreal Poly Haven fir saplings (CC0) as small course shrubbery.
+  'bush-0': { ax: 0.548, ay: 0.911, scale: 0.14, shadow: 0.34 },
+  'bush-1': { ax: 0.375, ay: 0.885, scale: 0.13, shadow: 0.36 },
 };
 
 async function loadPropOverride(key: string): Promise<PropTexture | null> {
