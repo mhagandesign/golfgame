@@ -287,7 +287,7 @@ const SURFACE_FILE_NAMES: Record<Surface, string> = {
  * sets the ground-contact anchor and base scale for that sprite family.
  */
 const PROP_OVERRIDES: Record<string, { ax?: number; ay: number; scale: number }> = {
-  'clubhouse-0': { ax: 0.432, ay: 0.716, scale: 0.52 },
+  'clubhouse-0': { ax: 0.413, ay: 0.775, scale: 0.52 },
   'drinks-0': { ax: 0.405, ay: 0.799, scale: 0.21 },
   'snacks-0': { ax: 0.405, ay: 0.786, scale: 0.21 },
   'toilet-0': { ax: 0.405, ay: 0.774, scale: 0.21 },
