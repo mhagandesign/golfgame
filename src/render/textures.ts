@@ -294,10 +294,10 @@ const PROP_OVERRIDES: Record<string, { ax?: number; ay: number; scale: number; s
   'drinks-0': { ax: 0.405, ay: 0.799, scale: 0.21 },
   'snacks-0': { ax: 0.405, ay: 0.786, scale: 0.21 },
   'toilet-0': { ax: 0.405, ay: 0.774, scale: 0.21 },
-  'tree-0': { ay: 0.88, scale: 0.88 },
-  'tree-1': { ay: 0.9, scale: 0.85 }, // columnar cypress
-  'tree-2': { ay: 0.88, scale: 0.88 },
-  'tree-3': { ay: 0.88, scale: 0.85 },
+  // Photoreal Poly Haven deciduous trees (CC0).
+  'tree-0': { ax: 0.564, ay: 0.948, scale: 0.17, shadow: 0.34 }, // full parkland
+  'tree-1': { ax: 0.698, ay: 0.919, scale: 0.17, shadow: 0.34 }, // gnarled
+  'tree-2': { ax: 0.554, ay: 0.982, scale: 0.16, shadow: 0.32 }, // small ornamental
   // Photoreal Poly Haven firs (CC0), rendered at the game angle.
   'pine-0': { ax: 0.482, ay: 0.975, scale: 0.34, shadow: 0.32 },
   'pine-1': { ax: 0.491, ay: 0.964, scale: 0.36, shadow: 0.34 },
@@ -650,7 +650,7 @@ export class GameTextures {
   }
 
   variantCount(kind: ObjectKind): number {
-    if (kind === 'tree') return 4;
+    if (kind === 'tree') return 3;
     if (kind === 'pine') return 3;
     if (kind === 'bush') return 2;
     return 1;

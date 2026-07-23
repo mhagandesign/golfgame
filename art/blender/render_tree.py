@@ -12,6 +12,10 @@ from bpy_extras.object_utils import world_to_camera_view
 argv = sys.argv[sys.argv.index('--') + 1:]
 target = argv[0]
 outpath = argv[1]
+# 'keepall' leaves other objects visible (needed for geometry-nodes trees whose
+# instanced leaves/branches would vanish if their source meshes were hidden);
+# tight framing keeps off-origin clutter out of shot.
+keepall = 'keepall' in argv[2:]
 
 scene = bpy.context.scene
 scene.render.engine = 'CYCLES'
@@ -25,16 +29,17 @@ scene.render.resolution_y = RES
 scene.render.image_settings.file_format = 'PNG'
 scene.render.image_settings.color_mode = 'RGBA'
 
-# Show only the target tree (its LOD0 mesh is the full assembled tree).
-for o in bpy.data.objects:
-    o.hide_render = True
 tgt = bpy.data.objects[target]
-tgt.hide_render = False
-# Bring it to the origin regardless of where the variant sat.
-dx, dy = tgt.location.x, tgt.location.y
+if not keepall:
+    # Standalone assembled meshes: hide everything else for a clean shot.
+    for o in bpy.data.objects:
+        o.hide_render = True
+    tgt.hide_render = False
+# Bring the target to the origin regardless of where the variant sat.
 tgt.location.x = 0
 tgt.location.y = 0
 height = tgt.dimensions.z
+framedim = max(tgt.dimensions.x, tgt.dimensions.y, tgt.dimensions.z)
 
 # No baked ground shadow — trees are clean cutouts and the engine draws a
 # soft contact shadow, so many trees don't stack giant overlapping shadows.
@@ -42,7 +47,7 @@ height = tgt.dimensions.z
 # Dimetric camera (same axis as the clubhouse), framing the whole tree.
 cam_data = bpy.data.cameras.new('cam')
 cam_data.type = 'ORTHO'
-cam_data.ortho_scale = height * 1.18
+cam_data.ortho_scale = framedim * 1.4
 cam = bpy.data.objects.new('cam', cam_data)
 scene.collection.objects.link(cam)
 cam.location = (100, -100, 100)  # ortho: only direction matters
