@@ -1,4 +1,21 @@
-# Drop-in photographic textures (optional)
+# Photographic terrain textures
+
+**Bundled here** (all CC0 / public domain, from [ambientCG](https://ambientcg.com),
+created by Lennart Demes — no attribution required, provided gratefully anyway):
+
+| File | Source asset | Adjustments |
+| --- | --- | --- |
+| `rough.jpg` | ambientCG **Grass004** | brightness/saturation tone-match |
+| `fairway.jpg`, `green.jpg`, `tee.jpg` | ambientCG **Grass005** | per-surface brightness variants |
+| `sand.jpg` | ambientCG **Ground080** | brightened |
+| `path.jpg` | ambientCG **Gravel022** | warmed, desaturated |
+
+Water intentionally has no photo override — the generated caustic water reads
+better under the tint pipeline.
+
+---
+
+# Drop-in photographic textures (how it works)
 
 The game generates all terrain art procedurally, but if image files exist in
 this folder they are used instead — this is the hook for real photographic

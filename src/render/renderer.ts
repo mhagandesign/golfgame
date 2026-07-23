@@ -76,7 +76,7 @@ export class Renderer {
     const vctx = vc.getContext('2d')!;
     const grad = vctx.createRadialGradient(256, 256, 150, 256, 256, 360);
     grad.addColorStop(0, 'rgba(10,20,8,0)');
-    grad.addColorStop(1, 'rgba(10,20,8,0.32)');
+    grad.addColorStop(1, 'rgba(10,20,8,0.2)');
     vctx.fillStyle = grad;
     vctx.fillRect(0, 0, 512, 512);
     this.vignette = new Sprite(Texture.from(vc));
@@ -112,8 +112,8 @@ export class Renderer {
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const n = fbm(x / size, y / size, 4, 5, 4242);
-        // 0.88 .. 1.0 multiply range, kept subtle.
-        const v = Math.round(255 * (0.9 + Math.min(1, Math.max(0, n)) * 0.1));
+        // Subtle multiply range — broad variation without murking the scene.
+        const v = Math.round(255 * (0.94 + Math.min(1, Math.max(0, n)) * 0.06));
         const i = (y * size + x) * 4;
         img.data[i] = v;
         img.data[i + 1] = v;
