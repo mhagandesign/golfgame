@@ -111,17 +111,39 @@ export class TerrainLayer {
         const pSE = worldToScreen(x + 1, y + 1, se);
         const pSW = worldToScreen(x, y + 1, sw);
 
-        // NW-sun lighting from the corner gradient, plus per-tile noise.
-        const grad = t.gradient(x, y);
-        let bright = 1 + (grad.dx * 0.75 + grad.dy * 0.35) * 0.16;
+        // ── Sculpted lighting: Lambert against the NW sun using a gradient
+        // smoothed over a wide stencil, so broad hills shade while single-tile
+        // bumps don't create a patchwork of diamonds. ──
+        const cxw = x + 0.5;
+        const cyw = y + 0.5;
+        const R = 2.5;
+        const gx = (t.heightAt(cxw + R, cyw) - t.heightAt(cxw - R, cyw)) / (2 * R);
+        const gy = (t.heightAt(cxw, cyw + R) - t.heightAt(cxw, cyw - R)) / (2 * R);
+        // Surface normal ∝ (-dH/dx, -dH/dy, 1); sun toward (-1,-1,1.3) (NW, high).
+        const nlen = Math.hypot(gx, gy, 1);
+        const ndotl = (0.52 * gx + 0.52 * gy + 0.677) / nlen;
+        let bright = 0.98 + (ndotl - 0.677) * 1.5;
+        // Gentle broad ambient occlusion: hollows sit in shade, ridges catch light.
+        const relief =
+          t.heightAt(cxw, cyw) -
+          (t.heightAt(cxw - 4.5, cyw) +
+            t.heightAt(cxw + 4.5, cyw) +
+            t.heightAt(cxw, cyw - 4.5) +
+            t.heightAt(cxw, cyw + 4.5)) /
+            4;
+        bright += Math.max(-0.09, Math.min(0.07, relief * 0.035));
         bright += tileNoise(x, y);
         // Mowing stripes across fairways and tees.
         if (surface === Surface.Fairway || surface === Surface.Tee) {
           bright += Math.floor((x + y) / 2) % 2 === 0 ? 0.05 : -0.05;
         }
-        // Texture fill tinted by lighting; worn turf browns the tint.
+        bright = Math.max(0.42, Math.min(1.4, bright));
+        // Texture fill tinted by lighting; shaded faces pick up cool sky fill,
+        // sunlit faces a touch of warmth — matching the rendered props.
+        let tint = shade(0xffffff, bright);
+        if (bright < 0.9) tint = mix(tint, 0x5878a0, (0.9 - bright) * 0.5);
+        else if (bright > 1.08) tint = mix(tint, 0xfff2d8, (bright - 1.08) * 0.7);
         const wear = t.wearAt(x, y);
-        let tint = shade(0xffffff, Math.max(0.6, Math.min(1.35, bright)));
         if (wear > 0.03) tint = mix(tint, WEAR_COLOR, Math.min(0.75, wear * 0.8));
         const fill = this.textures.surfaces[surface];
         const style = { texture: fill.texture, matrix: fill.matrix, color: tint };
