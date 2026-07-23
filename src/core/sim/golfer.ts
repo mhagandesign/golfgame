@@ -4,14 +4,27 @@ import { findPath, Node } from './path';
 import { Rng } from './rng';
 import { ShotResult, computePutt, computeSwing, pickTarget } from './shots';
 
+import type { WorldObject, AmenityKind } from '../game';
+
 export type GolferState =
   | 'walking-to-tee'
   | 'preparing'
   | 'ball-in-flight'
   | 'walking-to-ball'
   | 'hole-done'
+  | 'walking-to-amenity'
+  | 'using-amenity'
   | 'leaving'
   | 'gone';
+
+export interface GolferContext {
+  terrain: Terrain;
+  holes: Hole[];
+  exit: { x: number; y: number };
+  amenities: WorldObject[];
+  /** Called when the golfer buys at an amenity; returns the price charged. */
+  purchase(kind: AmenityKind, golfer: Golfer): void;
+}
 
 export interface ActiveShot extends ShotResult {
   progress: number; // 0..1
@@ -44,9 +57,19 @@ export class Golfer {
   shot: ActiveShot | null = null;
   legIndex = 0;
 
+  /** Needs grow over the round; amenities reset them (0 = satisfied). */
+  thirst = 0;
+  hunger = 0;
+  bladder = 0;
+  /** Accumulated unhappiness from needs the course never met. */
+  neglect = 0;
+
+  private amenityTarget: WorldObject | null = null;
+  private amenityTime = 0;
   private path: Node[] | null = null;
   private pathT = 0;
   private prepTime = 0;
+  private lastWearTile = -1;
   /** tiles per game minute */
   private walkSpeed: number;
 
@@ -64,7 +87,17 @@ export class Golfer {
   }
 
   /** Advance the golfer by dt game minutes. Returns true when finished & gone. */
-  update(dt: number, terrain: Terrain, holes: Hole[], exit: Pt): boolean {
+  update(dt: number, ctx: GolferContext): boolean {
+    const { terrain, holes } = ctx;
+    // Needs build slowly over the round.
+    this.thirst = Math.min(1, this.thirst + dt * 0.005);
+    this.hunger = Math.min(1, this.hunger + dt * 0.003);
+    this.bladder = Math.min(1, this.bladder + dt * 0.004);
+    // Maxed-out needs sour the round while they stay unmet.
+    if (this.thirst >= 1 || this.hunger >= 1 || this.bladder >= 1) {
+      this.neglect = Math.min(30, this.neglect + dt * 0.15);
+    }
+
     switch (this.state) {
       case 'walking-to-tee': {
         const hole = holes[this.holeIndex];
@@ -93,6 +126,8 @@ export class Golfer {
           this.ball = { ...shot.to };
           this.strokesThisHole += shot.strokes;
           if (shot.water) this.waterBalls++;
+          // Divot / pitch mark where the ball came down.
+          terrain.addWear(Math.floor(this.ball.x), Math.floor(this.ball.y), 0.02);
           const holed = shot.holed;
           this.shot = null;
           if (holed || this.strokesThisHole >= 10) {
@@ -117,7 +152,12 @@ export class Golfer {
         this.scorecard.push(this.strokesThisHole);
         this.strokesThisHole = 0;
         this.holeIndex++;
-        if (this.holeIndex >= holes.length) {
+        // Between holes: detour to an amenity when a need is pressing.
+        const amenity = this.pickAmenity(ctx);
+        if (amenity) {
+          this.amenityTarget = amenity;
+          this.state = 'walking-to-amenity';
+        } else if (this.holeIndex >= holes.length) {
           this.state = 'leaving';
         } else {
           this.state = 'walking-to-tee';
@@ -125,8 +165,36 @@ export class Golfer {
         this.path = null;
         break;
       }
+      case 'walking-to-amenity': {
+        if (!this.amenityTarget) {
+          this.state = 'walking-to-tee';
+          break;
+        }
+        const a = this.amenityTarget;
+        if (this.walkAlong(dt, terrain, { x: a.x, y: a.y })) {
+          this.state = 'using-amenity';
+          this.amenityTime = this.rng.range(0.8, 1.8);
+        }
+        break;
+      }
+      case 'using-amenity': {
+        this.amenityTime -= dt;
+        if (this.amenityTime <= 0) {
+          const a = this.amenityTarget;
+          if (a) {
+            ctx.purchase(a.kind as AmenityKind, this);
+            if (a.kind === 'drinks') this.thirst = 0;
+            else if (a.kind === 'snacks') this.hunger = 0;
+            else if (a.kind === 'toilet') this.bladder = 0;
+          }
+          this.amenityTarget = null;
+          this.state = this.holeIndex >= holes.length ? 'leaving' : 'walking-to-tee';
+          this.path = null;
+        }
+        break;
+      }
       case 'leaving': {
-        if (this.walkAlong(dt, terrain, exit)) {
+        if (this.walkAlong(dt, terrain, ctx.exit)) {
           this.state = 'gone';
           return true;
         }
@@ -136,6 +204,31 @@ export class Golfer {
         return true;
     }
     return false;
+  }
+
+  /** The most pressing need with a reachable amenity, if any. */
+  private pickAmenity(ctx: GolferContext): WorldObject | null {
+    const wants: Array<{ value: number; kind: AmenityKind }> = [
+      { value: this.thirst, kind: 'drinks' },
+      { value: this.hunger, kind: 'snacks' },
+      { value: this.bladder, kind: 'toilet' },
+    ]
+      .filter((w) => w.value > 0.55)
+      .sort((a, b) => b.value - a.value) as Array<{ value: number; kind: AmenityKind }>;
+    for (const want of wants) {
+      let best: WorldObject | null = null;
+      let bestD = 45; // beyond this it's not worth the detour
+      for (const a of ctx.amenities) {
+        if (a.kind !== want.kind) continue;
+        const d = Math.hypot(a.x + 0.5 - this.pos.x, a.y + 0.5 - this.pos.y);
+        if (d < bestD) {
+          bestD = d;
+          best = a;
+        }
+      }
+      if (best) return best;
+    }
+    return null;
   }
 
   private startPreparing(): void {
@@ -194,14 +287,21 @@ export class Golfer {
     const b = this.path[seg + 1];
     const t = this.pathT - seg;
     this.pos = { x: a.x + (b.x - a.x) * t + 0.5, y: a.y + (b.y - a.y) * t + 0.5 };
+    // Foot traffic wears the turf.
+    const tileIdx = Math.floor(this.pos.y) * terrain.w + Math.floor(this.pos.x);
+    if (tileIdx !== this.lastWearTile) {
+      this.lastWearTile = tileIdx;
+      terrain.addWear(Math.floor(this.pos.x), Math.floor(this.pos.y), 0.005);
+    }
     return false;
   }
 
   /** Post-round satisfaction, 0..100. */
-  enjoyment(holes: Hole[], fee: number, fairFee: number): number {
+  enjoyment(holes: Hole[], fee: number, fairFee: number, turfCondition = 1): number {
     const totalPar = holes.reduce((s, hl) => s + holePar(hl), 0);
     const diff = totalPar - this.scorecard.reduce((a, b) => a + b, 0);
-    let e = 58 + diff * 2.5 - this.waterBalls * 3;
+    let e = 58 + diff * 2.5 - this.waterBalls * 3 - this.neglect;
+    e -= (1 - turfCondition) * 30; // shabby turf is noticed
     if (fee > fairFee * 1.5) e -= 12;
     else if (fee < fairFee * 0.6) e += 5;
     return Math.max(0, Math.min(100, e));

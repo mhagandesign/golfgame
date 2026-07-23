@@ -19,6 +19,26 @@ export function shade(color: number, factor: number): number {
   return (r << 16) | (g << 8) | b;
 }
 
+export function mix(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff;
+  const ag = (a >> 8) & 0xff;
+  const ab = a & 0xff;
+  const br = (b >> 16) & 0xff;
+  const bg = (b >> 8) & 0xff;
+  const bb = b & 0xff;
+  return (
+    (Math.round(ar + (br - ar) * t) << 16) |
+    (Math.round(ag + (bg - ag) * t) << 8) |
+    Math.round(ab + (bb - ab) * t)
+  );
+}
+
+/** Deterministic hash in [0,1) for scatter placement. */
+export function hash2(x: number, y: number): number {
+  const n = Math.sin(x * 269.5 + y * 183.3) * 43758.5453;
+  return n - Math.floor(n);
+}
+
 /** Small deterministic per-tile variation so large lawns don't look flat. */
 export function tileNoise(x: number, y: number): number {
   const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;

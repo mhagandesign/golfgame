@@ -196,6 +196,48 @@ body,
   font-size: 11px;
 }
 
+/* ── Finance chart ── */
+.fin-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 48px;
+  margin: 4px 0 2px;
+}
+
+.fin-day {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.fin-day .bar {
+  width: 5px;
+  min-height: 1px;
+  border-radius: 1px 1px 0 0;
+}
+
+.fin-day .bar.in {
+  background: #8cc152;
+}
+
+.fin-day .bar.out {
+  background: #d9694f;
+}
+
+.fin-legend {
+  font-size: 11px;
+  color: #9cb086;
+}
+
+.fin-legend .in {
+  color: #8cc152;
+}
+
+.fin-legend .out {
+  color: #d9694f;
+}
+
 /* ── Status bar ── */
 #status-bar {
   position: fixed;

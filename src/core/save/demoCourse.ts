@@ -157,8 +157,27 @@ export function buildDemoCourse(): Game {
 
   scatterTrees(game, rng, 220);
 
+  // Amenities: refreshments near the clubhouse and the turn, toilets at both.
+  const amenities: Array<[Parameters<Game['placeObject']>[0], number, number]> = [
+    ['drinks', clubX + 5, clubY + 1],
+    ['toilet', clubX - 3, clubY + 1],
+    ['snacks', 42, 60],
+    ['drinks', 44, 62],
+    ['toilet', 40, 62],
+  ];
+  for (const [kind, x, y] of amenities) {
+    const cashBefore = game.cash;
+    game.placeObject(kind, x, y);
+    game.cash = cashBefore;
+  }
+
+  // A couple of groundskeepers keep Willow Creek pristine.
+  game.hireGroundskeeper();
+  game.hireGroundskeeper();
+
   game.cash = 50000;
   game.greenFee = 35;
   game.reputation = 55;
+  game.forecast = 'sun';
   return game;
 }

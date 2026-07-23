@@ -1,4 +1,5 @@
-import { Game, ObjectKind, OBJECT_COSTS } from '../core/game';
+import { Game, ObjectKind, OBJECT_COSTS, WEATHER_LABELS } from '../core/game';
+import { GROUNDSKEEPER_WAGE } from '../core/sim/staff';
 import { Surface, SURFACE_NAMES } from '../core/terrain/terrain';
 import { holeLengthYards, holePar } from '../core/course/course';
 import { SURFACE_COLORS } from '../render/colors';
@@ -15,6 +16,8 @@ export interface UIActions {
   exportFile(): void;
   deleteHole(index: number): void;
   backToTitle(): void;
+  hireStaff(): void;
+  fireStaff(): void;
 }
 
 const SPEEDS = [0, 1, 3, 8];
@@ -30,6 +33,7 @@ export class UI {
   private openBtn!: HTMLButtonElement;
   private feeInput!: HTMLInputElement;
   private currentSpeed = 1;
+  private lastHudHeight = 0;
 
   constructor(
     private game: Game,
@@ -38,6 +42,15 @@ export class UI {
     this.buildHud();
     this.buildToolbar();
     this.refreshPanel();
+    this.layout();
+    window.addEventListener('resize', () => this.layout());
+  }
+
+  /** Keep the side panels clear of the HUD, which can wrap to multiple rows. */
+  private layout(): void {
+    const top = `${this.hud.offsetHeight + 8}px`;
+    this.toolbar.style.top = top;
+    this.panel.style.top = top;
   }
 
   setGame(game: Game): void {
@@ -64,8 +77,10 @@ export class UI {
     this.statEls['name'] = name;
 
     mkStat('clock', '🕒');
+    mkStat('weather', '');
     mkStat('cash', '💰');
     mkStat('rep', '⭐');
+    mkStat('turf', '🌱');
     mkStat('visitors', '👥 today');
     mkStat('onCourse', '⛳ playing');
 
@@ -185,6 +200,16 @@ export class UI {
       this.addToolButton(`obj-${kind}`, `${label} $${OBJECT_COSTS[kind]}`, { kind: 'object', object: kind });
     }
 
+    this.addGroupLabel('Amenities');
+    const amenities: Array<[ObjectKind, string]> = [
+      ['drinks', '🥤 Drinks stand'],
+      ['snacks', '🌭 Snack bar'],
+      ['toilet', '🚻 Toilets'],
+    ];
+    for (const [kind, label] of amenities) {
+      this.addToolButton(`obj-${kind}`, `${label} $${OBJECT_COSTS[kind]}`, { kind: 'object', object: kind });
+    }
+
     this.addGroupLabel('Course design');
     this.addToolButton('hole', '⛳ New hole', { kind: 'hole' });
     this.addToolButton('finish-hole', '🟢 Place green', null, () => this.actions.finishHole());
@@ -224,6 +249,23 @@ export class UI {
       issues.length === 0
         ? `<div class="ok">✔ Course is ready for golfers.</div>`
         : issues.map((i) => `<div class="issue">⚠ ${i.message}</div>`).join('');
+
+    // Finance history: last 14 days as paired income/expense bars.
+    const days = g.history.slice(-14);
+    const maxVal = Math.max(100, ...days.map((d) => Math.max(d.income, d.expenses)));
+    const bars = days
+      .map(
+        (d) => `<div class="fin-day" title="Day ${d.day}: +$${d.income} / −$${d.expenses}, ${d.visitors} visitors">
+          <div class="bar in" style="height:${Math.round((d.income / maxVal) * 44)}px"></div>
+          <div class="bar out" style="height:${Math.round((d.expenses / maxVal) * 44)}px"></div>
+        </div>`,
+      )
+      .join('');
+    const financeHtml = days.length
+      ? `<div class="fin-chart">${bars}</div>
+         <div class="fin-legend"><span class="in">■</span> income <span class="out">■</span> expenses</div>`
+      : `<div style="color:#9cb086">No trading history yet.</div>`;
+
     this.panel.innerHTML = `
       <h3>${g.courseName}</h3>
       <table>
@@ -233,11 +275,22 @@ export class UI {
       <div>Total par: <b>${g.totalPar()}</b> · Holes: <b>${g.holes.length}</b></div>
       <div>Demand: <b>${g.demandPerDay()}</b> golfers/day · Fair fee: $${g.fairFee()}</div>
       <div>Daily upkeep: $${g.dailyUpkeep()}</div>
+      <div>Forecast tomorrow: ${WEATHER_LABELS[g.forecast]}</div>
       <div style="margin-top:8px">${issuesHtml}</div>
+      <h3 style="margin-top:12px">Staff</h3>
+      <div>Groundskeepers: <b>${g.staff.length}</b> ($${GROUNDSKEEPER_WAGE}/day each)</div>
+      <div style="margin-top:4px">
+        <button id="hire-gk">+ Hire</button>
+        <button id="fire-gk">− Let go</button>
+      </div>
+      <h3 style="margin-top:12px">Finances</h3>
+      ${financeHtml}
     `;
     this.panel.querySelectorAll<HTMLButtonElement>('button.del').forEach((b) => {
       b.addEventListener('click', () => this.actions.deleteHole(Number(b.dataset.hole)));
     });
+    this.panel.querySelector('#hire-gk')?.addEventListener('click', () => this.actions.hireStaff());
+    this.panel.querySelector('#fire-gk')?.addEventListener('click', () => this.actions.fireStaff());
   }
 
   /** Called every frame — cheap DOM updates only. */
@@ -245,11 +298,17 @@ export class UI {
     const g = this.game;
     this.statEls['name'].textContent = `⛳ ${g.courseName}`;
     this.statEls['clock'].textContent = g.clockText;
+    this.statEls['weather'].textContent = WEATHER_LABELS[g.weather];
     this.statEls['cash'].textContent = `$${Math.round(g.cash).toLocaleString()}`;
     this.statEls['rep'].textContent = `${g.reputation.toFixed(0)}/100`;
+    this.statEls['turf'].textContent = `${Math.round(g.terrain.turfCondition() * 100)}%`;
     this.statEls['visitors'].textContent = String(g.todayVisitors);
     this.statEls['onCourse'].textContent = String(g.golfers.length);
     this.openBtn.textContent = g.courseOpen ? '🟢 Open — click to close' : '🔴 Closed — click to open';
     this.openBtn.classList.toggle('is-open', g.courseOpen);
+    if (this.hud.offsetHeight !== this.lastHudHeight) {
+      this.lastHudHeight = this.hud.offsetHeight;
+      this.layout();
+    }
   }
 }

@@ -28,10 +28,13 @@ The core loop:
    `G` (or the "Place green" button) and click to place the green. Yardage and
    par are computed automatically.
 4. **Build a clubhouse** and scenery, set your green fee, and **open the course**.
-5. Golfers arrive based on reputation and pricing, walk the course, and play
-   shots simulated from their skill, lie, distance and hazards — rendered as
-   animated ball flights. Their enjoyment feeds your reputation, which drives
-   demand.
+5. Golfers arrive based on reputation, pricing, **weather** and turf condition;
+   they walk the course and play shots simulated from their skill, lie,
+   distance and hazards — rendered as animated ball flights. Their enjoyment
+   feeds your reputation, which drives demand.
+6. Foot traffic and divots **wear the turf** down — hire groundskeepers to mow
+   and repair it. Golfers get thirsty, hungry and desperate: place **drink
+   stands, snack bars and toilets** to keep them happy (and take their money).
 
 ### Controls
 

@@ -1,9 +1,27 @@
 import { Surface, Terrain } from './terrain/terrain';
 import { Hole, Pt, coursePar, validateCourse, HoleIssue } from './course/course';
 import { Golfer } from './sim/golfer';
+import { Groundskeeper, GROUNDSKEEPER_WAGE } from './sim/staff';
 import { Rng } from './sim/rng';
 
-export type ObjectKind = 'tree' | 'pine' | 'bush' | 'rock' | 'flowers' | 'clubhouse';
+export type AmenityKind = 'drinks' | 'snacks' | 'toilet';
+export type ObjectKind = 'tree' | 'pine' | 'bush' | 'rock' | 'flowers' | 'clubhouse' | AmenityKind;
+
+export type Weather = 'sun' | 'cloud' | 'rain';
+
+export const WEATHER_LABELS: Record<Weather, string> = {
+  sun: '☀️ Sunny',
+  cloud: '⛅ Cloudy',
+  rain: '🌧 Rain',
+};
+
+const WEATHER_DEMAND: Record<Weather, number> = { sun: 1, cloud: 0.85, rain: 0.35 };
+
+export const AMENITY_PRICES: Record<AmenityKind, number> = {
+  drinks: 5,
+  snacks: 9,
+  toilet: 2,
+};
 
 export interface WorldObject {
   id: number;
@@ -19,6 +37,9 @@ export const OBJECT_COSTS: Record<ObjectKind, number> = {
   rock: 10,
   flowers: 20,
   clubhouse: 4000,
+  drinks: 600,
+  snacks: 900,
+  toilet: 500,
 };
 
 export const OBJECT_FOOTPRINT: Record<ObjectKind, number> = {
@@ -28,7 +49,17 @@ export const OBJECT_FOOTPRINT: Record<ObjectKind, number> = {
   rock: 1,
   flowers: 1,
   clubhouse: 3,
+  drinks: 1,
+  snacks: 1,
+  toilet: 1,
 };
+
+/** Daily operating cost for amenities. */
+const AMENITY_UPKEEP: Record<AmenityKind, number> = { drinks: 10, snacks: 18, toilet: 8 };
+
+export function isAmenity(kind: ObjectKind): kind is AmenityKind {
+  return kind === 'drinks' || kind === 'snacks' || kind === 'toilet';
+}
 
 export const SURFACE_COSTS: Record<Surface, number> = {
   [Surface.Rough]: 1,
@@ -69,11 +100,14 @@ export class Game {
   holes: Hole[] = [];
   objects: WorldObject[] = [];
   golfers: Golfer[] = [];
+  staff: Groundskeeper[] = [];
 
   cash = 50000;
   greenFee = 30;
   reputation = 50;
   courseOpen = false;
+  weather: Weather = 'sun';
+  forecast: Weather = 'sun';
 
   day = 1;
   /** Minute of day; the sim starts at 06:00 on day 1. */
@@ -111,17 +145,39 @@ export class Game {
     }
     this.maybeSpawn(dt);
     const exit = this.spawnPoint();
+    const ctx = {
+      terrain: this.terrain,
+      holes: this.holes,
+      exit: { x: Math.floor(exit.x), y: Math.floor(exit.y) },
+      amenities: this.objects.filter((o) => isAmenity(o.kind)),
+      purchase: (kind: AmenityKind) => {
+        const price = AMENITY_PRICES[kind];
+        this.cash += price;
+        this.todayIncome += price;
+      },
+    };
     for (const g of this.golfers) {
-      const done = g.update(dt, this.terrain, this.holes, { x: Math.floor(exit.x), y: Math.floor(exit.y) });
+      const done = g.update(dt, ctx);
       if (done) this.onGolferFinished(g);
     }
     this.golfers = this.golfers.filter((g) => g.state !== 'gone');
+    for (const s of this.staff) s.update(dt, this.terrain);
   }
 
   private endOfDay(): void {
     const upkeep = this.dailyUpkeep();
     this.cash -= upkeep;
     this.todayExpenses += upkeep;
+    // Turf recovers a little overnight.
+    for (let i = 0; i < this.terrain.wear.length; i++) {
+      if (this.terrain.wear[i] > 0) {
+        this.terrain.wear[i] = Math.max(0, this.terrain.wear[i] - 8);
+        this.terrain.wearDirty.add(i);
+      }
+    }
+    // Tomorrow's weather arrives; roll a fresh forecast.
+    this.weather = this.forecast;
+    this.forecast = this.rollWeather();
     this.history.push({
       day: this.day,
       income: this.todayIncome,
@@ -144,7 +200,29 @@ export class Game {
     }
     for (const [s, n] of counts) total += SURFACE_UPKEEP[s] * n;
     total += this.objects.length * 0.2;
+    for (const o of this.objects) {
+      if (isAmenity(o.kind)) total += AMENITY_UPKEEP[o.kind];
+    }
+    total += this.staff.length * GROUNDSKEEPER_WAGE;
     return Math.round(total);
+  }
+
+  private rollWeather(): Weather {
+    const r = this.rng.next();
+    if (r < 0.55) return 'sun';
+    if (r < 0.85) return 'cloud';
+    return 'rain';
+  }
+
+  hireGroundskeeper(): Groundskeeper | null {
+    if (this.staff.length >= 8) return null;
+    const s = new Groundskeeper(this.rng, this.spawnPoint());
+    this.staff.push(s);
+    return s;
+  }
+
+  fireGroundskeeper(): boolean {
+    return this.staff.pop() !== undefined;
   }
 
   // ── Golfer demand & spawning ────────────────────────────────────────────
@@ -160,7 +238,8 @@ export class Game {
     const repFactor = Math.pow(this.reputation / 50, 1.4);
     const feeRatio = this.greenFee / this.fairFee();
     const feeFactor = Math.max(0.05, Math.min(1.5, 1.55 - feeRatio));
-    return Math.round(this.holes.length * 7 * repFactor * feeFactor);
+    const conditionFactor = 0.4 + 0.6 * this.terrain.turfCondition();
+    return Math.round(this.holes.length * 7 * repFactor * feeFactor * WEATHER_DEMAND[this.weather] * conditionFactor);
   }
 
   private maybeSpawn(dt: number): void {
@@ -196,7 +275,7 @@ export class Game {
 
   private onGolferFinished(g: Golfer): void {
     if (g.scorecard.length === 0) return;
-    const enjoy = g.enjoyment(this.holes, this.greenFee, this.fairFee());
+    const enjoy = g.enjoyment(this.holes, this.greenFee, this.fairFee(), this.terrain.turfCondition());
     this.reputation += (enjoy - this.reputation) * 0.06;
     this.reputation = Math.max(1, Math.min(100, this.reputation));
   }

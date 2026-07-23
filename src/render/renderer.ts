@@ -4,7 +4,24 @@ import { Camera } from './camera';
 import { SceneLayer } from './sceneLayer';
 import { TerrainLayer } from './terrainLayer';
 import { screenToWorld, worldToScreen } from './iso';
+import { mix } from './colors';
 import { Pt, holeLegs } from '../core/course/course';
+
+/** Ambient light color for a given minute of day. */
+export function ambientForMinute(minute: number): number {
+  const h = minute / 60;
+  const NIGHT = 0x7888b8;
+  const DAWN = 0xffd8b0;
+  const DAY = 0xffffff;
+  const DUSK = 0xffc090;
+  if (h < 5) return NIGHT;
+  if (h < 6.5) return mix(NIGHT, DAWN, (h - 5) / 1.5);
+  if (h < 8) return mix(DAWN, DAY, (h - 6.5) / 1.5);
+  if (h < 17.5) return DAY;
+  if (h < 19.5) return mix(DAY, DUSK, (h - 17.5) / 2);
+  if (h < 21) return mix(DUSK, NIGHT, (h - 19.5) / 1.5);
+  return NIGHT;
+}
 
 export class Renderer {
   readonly app = new Application();
@@ -16,6 +33,10 @@ export class Renderer {
   readonly highlight = new Graphics();
   /** Hole routing overlay (dashed target lines) shown in the hole designer. */
   readonly routes = new Graphics();
+  /** Screen-space rain overlay. */
+  private rain = new Graphics();
+  private rainDrops: Array<{ x: number; y: number; speed: number }> = [];
+  private elapsed = 0;
 
   private game: Game;
 
@@ -41,6 +62,11 @@ export class Renderer {
     this.world.addChild(this.sceneLayer.container);
     this.world.addChild(this.highlight);
     this.app.stage.addChild(this.world);
+    this.app.stage.addChild(this.rain);
+
+    for (let i = 0; i < 140; i++) {
+      this.rainDrops.push({ x: Math.random(), y: Math.random(), speed: 0.6 + Math.random() * 0.5 });
+    }
 
     this.centerOnMap();
   }
@@ -129,8 +155,39 @@ export class Renderer {
     if (draft && draft.length > 0) drawLine(draft, 0xffe066);
   }
 
-  frame(): void {
-    this.terrainLayer.update();
-    this.sceneLayer.update();
+  frame(dtSec = 0): void {
+    this.elapsed += dtSec;
+    this.terrainLayer.update(this.elapsed);
+    this.sceneLayer.update(this.elapsed);
+
+    // Time-of-day ambient light (weather dims it further).
+    let ambient = ambientForMinute(this.game.minute);
+    if (this.game.weather === 'rain') ambient = mix(ambient, 0x8898a8, 0.45);
+    else if (this.game.weather === 'cloud') ambient = mix(ambient, 0xc8ccd4, 0.25);
+    this.world.tint = ambient;
+
+    this.updateRain(dtSec);
+  }
+
+  private updateRain(dtSec: number): void {
+    this.rain.clear();
+    if (this.game.weather !== 'rain') return;
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    for (const d of this.rainDrops) {
+      d.y += d.speed * dtSec * 1.4;
+      d.x -= d.speed * dtSec * 0.25;
+      if (d.y > 1) {
+        d.y -= 1 + Math.random() * 0.1;
+        d.x = Math.random();
+      }
+      if (d.x < 0) d.x += 1;
+      const px = d.x * w;
+      const py = d.y * h;
+      this.rain
+        .moveTo(px, py)
+        .lineTo(px + 3, py + 11)
+        .stroke({ color: 0xbcd4e8, width: 1, alpha: 0.5 });
+    }
   }
 }

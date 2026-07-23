@@ -82,6 +82,15 @@ async function boot(): Promise<void> {
       inGame = false;
       title.show();
     },
+    hireStaff: () => {
+      const gk = game.hireGroundskeeper();
+      ui.toast(gk ? `Hired ${gk.name} the groundskeeper.` : 'Staff room is full (8 max).');
+      ui.refreshPanel();
+    },
+    fireStaff: () => {
+      if (game.fireGroundskeeper()) ui.toast('A groundskeeper hangs up their rake.');
+      ui.refreshPanel();
+    },
   });
 
   title = new TitleScreen({
@@ -113,9 +122,14 @@ async function boot(): Promise<void> {
   // ── Main loop: fixed-step simulation, per-frame rendering. ──
   let accumulator = 0;
   let panelTimer = 0;
+  let lastDay = game.day;
   const STEP = 0.25; // game minutes per sim step
   renderer.app.ticker.add((ticker) => {
     if (inGame) {
+      if (game.day !== lastDay) {
+        lastDay = game.day;
+        saveToLocalStorage(game, 'autosave');
+      }
       // 1 real second = 1 game minute at 1× speed.
       const dtMin = (ticker.deltaMS / 1000) * speed;
       accumulator += Math.min(dtMin, 30);
@@ -131,7 +145,7 @@ async function boot(): Promise<void> {
         ui.refreshPanel();
       }
     }
-    renderer.frame();
+    renderer.frame(ticker.deltaMS / 1000);
   });
 }
 

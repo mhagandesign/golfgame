@@ -1,15 +1,17 @@
-import { Game, WorldObject } from '../game';
+import { Game, Weather, WorldObject } from '../game';
 import { Hole } from '../course/course';
 import { Terrain } from '../terrain/terrain';
 
 export interface SaveData {
-  version: 1;
+  version: 1 | 2;
   courseName: string;
   terrain: {
     w: number;
     h: number;
     heights: number[];
     surfaces: number[];
+    /** v2+ */
+    wear?: number[];
   };
   holes: Hole[];
   objects: WorldObject[];
@@ -19,17 +21,22 @@ export interface SaveData {
   courseOpen: boolean;
   day: number;
   minute: number;
+  /** v2+ */
+  staffCount?: number;
+  weather?: Weather;
+  forecast?: Weather;
 }
 
 export function serialize(game: Game): SaveData {
   return {
-    version: 1,
+    version: 2,
     courseName: game.courseName,
     terrain: {
       w: game.terrain.w,
       h: game.terrain.h,
       heights: Array.from(game.terrain.heights),
       surfaces: Array.from(game.terrain.surfaces),
+      wear: Array.from(game.terrain.wear),
     },
     holes: game.holes.map((h) => ({
       number: h.number,
@@ -44,6 +51,9 @@ export function serialize(game: Game): SaveData {
     courseOpen: game.courseOpen,
     day: game.day,
     minute: game.minute,
+    staffCount: game.staff.length,
+    weather: game.weather,
+    forecast: game.forecast,
   };
 }
 
@@ -52,6 +62,7 @@ export function deserialize(data: SaveData): Game {
   game.terrain = new Terrain(data.terrain.w, data.terrain.h);
   game.terrain.heights.set(data.terrain.heights);
   game.terrain.surfaces.set(data.terrain.surfaces);
+  if (data.terrain.wear) game.terrain.wear.set(data.terrain.wear);
   game.courseName = data.courseName;
   game.holes = data.holes.map((h) => ({
     number: h.number,
@@ -69,6 +80,9 @@ export function deserialize(data: SaveData): Game {
   game.courseOpen = data.courseOpen;
   game.day = data.day;
   game.minute = data.minute;
+  game.weather = data.weather ?? 'sun';
+  game.forecast = data.forecast ?? 'sun';
+  for (let i = 0; i < (data.staffCount ?? 0); i++) game.hireGroundskeeper();
   return game;
 }
 

@@ -41,12 +41,17 @@ export class Terrain {
   readonly heights: Uint8Array;
   /** tile surfaces, w * h */
   readonly surfaces: Uint8Array;
+  /** turf wear per tile, 0 (pristine) .. 255 (ruined) */
+  readonly wear: Uint8Array;
+  /** tiles whose wear changed enough to need a visual refresh; drained by the renderer */
+  readonly wearDirty = new Set<number>();
 
   constructor(w: number, h: number, baseHeight = 2) {
     this.w = w;
     this.h = h;
     this.heights = new Uint8Array((w + 1) * (h + 1)).fill(baseHeight);
     this.surfaces = new Uint8Array(w * h).fill(Surface.Rough);
+    this.wear = new Uint8Array(w * h);
   }
 
   inBounds(x: number, y: number): boolean {
@@ -123,6 +128,42 @@ export class Terrain {
 
   isWalkable(x: number, y: number): boolean {
     return this.inBounds(x, y) && this.surfaceAt(x, y) !== Surface.Water;
+  }
+
+  wearAt(x: number, y: number): number {
+    return this.wear[y * this.w + x] / 255;
+  }
+
+  /**
+   * Add (or with negative amounts, repair) wear on a tile. Only maintained
+   * turf wears — rough, sand, water and paths shrug off traffic. Marks the
+   * tile visually dirty when wear moves across a rendering step.
+   */
+  addWear(x: number, y: number, amount: number): void {
+    if (!this.inBounds(x, y)) return;
+    const s = this.surfaceAt(x, y);
+    if (s !== Surface.Fairway && s !== Surface.Green && s !== Surface.Tee) return;
+    const i = y * this.w + x;
+    const before = this.wear[i];
+    const next = Math.max(0, Math.min(255, Math.round(before + amount * 255)));
+    if (next === before) return;
+    this.wear[i] = next;
+    // Redraw only when crossing a visible band (~10% steps) to limit churn.
+    if (Math.floor(before / 26) !== Math.floor(next / 26)) this.wearDirty.add(i);
+  }
+
+  /** Average condition (1 = pristine) across maintained turf tiles. */
+  turfCondition(): number {
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < this.surfaces.length; i++) {
+      const s = this.surfaces[i] as Surface;
+      if (s === Surface.Fairway || s === Surface.Green || s === Surface.Tee) {
+        sum += 1 - this.wear[i] / 255;
+        n++;
+      }
+    }
+    return n === 0 ? 1 : sum / n;
   }
 
   /**

@@ -1,6 +1,7 @@
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { Game, WorldObject, OBJECT_FOOTPRINT } from '../core/game';
 import { Golfer } from '../core/sim/golfer';
+import { Groundskeeper } from '../core/sim/staff';
 import { SHIRT_COLORS, shade } from './colors';
 import { HEIGHT_STEP, worldToScreen } from './iso';
 
@@ -8,7 +9,37 @@ function depth(fx: number, fy: number): number {
   return (fx + fy) * 100;
 }
 
+function drawKiosk(g: Graphics, body: number, roof: number, sign: string): void {
+  g.ellipse(0, 0, 13, 5).fill({ color: 0x000000, alpha: 0.2 });
+  g.poly([-12, -2, 0, 4, 0, -16, -12, -22]).fill(shade(body, 0.85));
+  g.poly([12, -2, 0, 4, 0, -16, 12, -22]).fill(body);
+  g.poly([-14, -20, 0, -13, 14, -20, 0, -27]).fill(roof);
+  const label = new Text({ text: sign, style: new TextStyle({ fontSize: 10 }) });
+  label.anchor.set(0.5);
+  label.position.set(0, -32);
+  g.addChild(label);
+}
+
 function drawObject(g: Graphics, obj: WorldObject): void {
+  switch (obj.kind) {
+    case 'drinks':
+      drawKiosk(g, 0x3c78b4, 0xd8e8f4, '🥤');
+      return;
+    case 'snacks':
+      drawKiosk(g, 0xb46a3c, 0xf0d8a8, '🌭');
+      return;
+    case 'toilet':
+      drawKiosk(g, 0x5a7a62, 0xc8d8cc, '🚻');
+      return;
+    default:
+      break;
+  }
+  // Natural scenery gets a soft shadow and per-instance size variation.
+  if (obj.kind !== 'clubhouse') {
+    g.ellipse(0, -1, 12, 5).fill({ color: 0x000000, alpha: 0.18 });
+    const s = 0.82 + ((obj.id * 37) % 9) * 0.045;
+    g.scale.set(s);
+  }
   switch (obj.kind) {
     case 'tree': {
       g.roundRect(-3, -14, 6, 14, 2).fill(0x7a5a3a);
@@ -67,15 +98,29 @@ function drawObject(g: Graphics, obj: WorldObject): void {
   }
 }
 
-function drawGolfer(g: Graphics, golfer: Golfer): void {
+function drawGolfer(g: Graphics, golfer: Golfer, bob: number): void {
   const shirt = SHIRT_COLORS[golfer.shirt % SHIRT_COLORS.length];
   g.ellipse(0, 0, 6, 3).fill({ color: 0x000000, alpha: 0.25 });
-  g.roundRect(-2.5, -8, 5, 7, 2).fill(0x3a4450); // trousers
-  g.roundRect(-3.5, -15, 7, 8, 2).fill(shirt);
-  g.circle(0, -18, 3.5).fill(0xe8c39a);
-  g.rect(-3.5, -21.5, 7, 2).fill(shade(shirt, 0.7)); // cap
+  g.roundRect(-2.5, -8 - bob, 5, 7 + bob, 2).fill(0x3a4450); // trousers
+  g.roundRect(-3.5, -15 - bob, 7, 8, 2).fill(shirt);
+  g.circle(0, -18 - bob, 3.5).fill(0xe8c39a);
+  g.rect(-3.5, -21.5 - bob, 7, 2).fill(shade(shirt, 0.7)); // cap
   if (golfer.state === 'preparing') {
     g.rect(3, -14, 1.5, 12).fill(0x888888); // club
+  }
+}
+
+function drawGroundskeeper(g: Graphics, gk: Groundskeeper, bob: number): void {
+  g.ellipse(0, 0, 6, 3).fill({ color: 0x000000, alpha: 0.25 });
+  g.roundRect(-2.5, -8 - bob, 5, 7 + bob, 2).fill(0x4a5a38); // work trousers
+  g.roundRect(-3.5, -15 - bob, 7, 8, 2).fill(0xc8a03c); // hi-vis vest
+  g.circle(0, -18 - bob, 3.5).fill(0xe8c39a);
+  g.rect(-3.5, -21.5 - bob, 7, 2).fill(0xa04030); // red cap
+  if (gk.state === 'mowing') {
+    // Push mower.
+    g.roundRect(4, -7, 9, 5, 1).fill(0x777777);
+    g.circle(5.5, -1.5, 2).fill(0x333333);
+    g.circle(11.5, -1.5, 2).fill(0x333333);
   }
 }
 
@@ -90,6 +135,7 @@ export class SceneLayer {
   private objectSprites = new Map<number, Graphics>();
   private golferSprites = new Map<number, Graphics>();
   private ballSprites = new Map<number, Graphics>();
+  private staffSprites = new Map<number, Graphics>();
   private courseFurniture: Graphics[] = [];
   private courseDirty = true;
 
@@ -103,18 +149,20 @@ export class SceneLayer {
     for (const s of this.objectSprites.values()) s.destroy();
     for (const s of this.golferSprites.values()) s.destroy();
     for (const s of this.ballSprites.values()) s.destroy();
+    for (const s of this.staffSprites.values()) s.destroy();
     for (const f of this.courseFurniture) f.destroy();
     this.courseFurniture = [];
     this.objectSprites.clear();
     this.golferSprites.clear();
     this.ballSprites.clear();
+    this.staffSprites.clear();
   }
 
   markCourseDirty(): void {
     this.courseDirty = true;
   }
 
-  update(): void {
+  update(timeSec = 0): void {
     const game = this.game;
     const t = game.terrain;
 
@@ -186,7 +234,11 @@ export class SceneLayer {
         this.container.addChild(sprite);
       }
       sprite.clear();
-      drawGolfer(sprite, golfer);
+      const walking =
+        golfer.state === 'walking-to-tee' || golfer.state === 'walking-to-ball' ||
+        golfer.state === 'walking-to-amenity' || golfer.state === 'leaving';
+      const bob = walking ? Math.abs(Math.sin(timeSec * 9 + golfer.id)) * 1.6 : 0;
+      drawGolfer(sprite, golfer, bob);
       const gp = worldToScreen(golfer.pos.x, golfer.pos.y, t.heightAt(golfer.pos.x, golfer.pos.y));
       sprite.position.set(gp.x, gp.y);
       sprite.zIndex = depth(golfer.pos.x, golfer.pos.y);
@@ -228,6 +280,30 @@ export class SceneLayer {
           ball.destroy();
           this.ballSprites.delete(id);
         }
+      }
+    }
+
+    // ── Groundskeepers ──
+    const liveStaff = new Set<number>();
+    for (const gk of game.staff) {
+      liveStaff.add(gk.id);
+      let sprite = this.staffSprites.get(gk.id);
+      if (!sprite) {
+        sprite = new Graphics();
+        this.staffSprites.set(gk.id, sprite);
+        this.container.addChild(sprite);
+      }
+      sprite.clear();
+      const bob = gk.state === 'walking' ? Math.abs(Math.sin(timeSec * 9 + gk.id)) * 1.6 : 0;
+      drawGroundskeeper(sprite, gk, bob);
+      const sp = worldToScreen(gk.pos.x, gk.pos.y, t.heightAt(gk.pos.x, gk.pos.y));
+      sprite.position.set(sp.x, sp.y);
+      sprite.zIndex = depth(gk.pos.x, gk.pos.y);
+    }
+    for (const [id, sprite] of this.staffSprites) {
+      if (!liveStaff.has(id)) {
+        sprite.destroy();
+        this.staffSprites.delete(id);
       }
     }
   }
