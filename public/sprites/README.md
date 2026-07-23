@@ -19,7 +19,14 @@ place of its procedurally baked props. Recognized keys: `tree-0..3`,
 `src/render/textures.ts` (`PROP_OVERRIDES`). Delete a file to fall back to
 the generated art for that prop.
 
+## Buildings
+
+`clubhouse-0.png`, `drinks-0.png`, `snacks-0.png` and `toilet-0.png` are
+rendered in-house with Blender from the scripts in `art/blender/` (dimetric
+camera + Cycles, matching light direction). Re-run those scripts to iterate.
+
 ## Credits
 
 - Trees, pines and bushes: Reiner "Tiles" Prokein — reinerstilesets.de
+- Clubhouse & kiosk renders: this project (`art/blender/`), CC0
 - Terrain photo textures (`../textures/`): ambientCG (CC0)

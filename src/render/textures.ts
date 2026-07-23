@@ -286,7 +286,11 @@ const SURFACE_FILE_NAMES: Record<Surface, string> = {
  * Tilesets' Blender renders) replace the baked procedural props. Each entry
  * sets the ground-contact anchor and base scale for that sprite family.
  */
-const PROP_OVERRIDES: Record<string, { ay: number; scale: number }> = {
+const PROP_OVERRIDES: Record<string, { ax?: number; ay: number; scale: number }> = {
+  'clubhouse-0': { ax: 0.432, ay: 0.716, scale: 0.52 },
+  'drinks-0': { ax: 0.405, ay: 0.799, scale: 0.21 },
+  'snacks-0': { ax: 0.405, ay: 0.786, scale: 0.21 },
+  'toilet-0': { ax: 0.405, ay: 0.774, scale: 0.21 },
   'tree-0': { ay: 0.88, scale: 0.88 },
   'tree-1': { ay: 0.9, scale: 0.85 }, // columnar cypress
   'tree-2': { ay: 0.88, scale: 0.88 },
@@ -311,7 +315,7 @@ async function loadPropOverride(key: string): Promise<PropTexture | null> {
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
     canvas.getContext('2d')!.drawImage(img, 0, 0);
-    return { texture: Texture.from(canvas), ax: 0.5, ay: spec.ay, scale: spec.scale };
+    return { texture: Texture.from(canvas), ax: spec.ax ?? 0.5, ay: spec.ay, scale: spec.scale };
   } catch {
     return null;
   }
