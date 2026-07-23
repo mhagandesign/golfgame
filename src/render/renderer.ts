@@ -65,6 +65,7 @@ export class Renderer {
     this.world.addChild(this.terrainLayer.container);
     this.world.addChild(this.buildMacroOverlay());
     this.world.addChild(this.routes);
+    this.world.addChild(this.sceneLayer.shadowContainer);
     this.world.addChild(this.sceneLayer.container);
     this.world.addChild(this.highlight);
     this.app.stage.addChild(this.world);

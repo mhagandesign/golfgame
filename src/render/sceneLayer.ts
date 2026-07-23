@@ -56,6 +56,9 @@ const labelStyle = new TextStyle({ fontFamily: 'sans-serif', fontSize: 11, fill:
  */
 export class SceneLayer {
   readonly container = new Container();
+  /** Soft contact shadows for shadowless sprite props; sits below the props. */
+  readonly shadowContainer = new Container();
+  private shadowSprites = new Map<number, Graphics>();
   private objectSprites = new Map<number, Sprite>();
   private golferSprites = new Map<number, Graphics>();
   private golferFacing = new Map<number, { x: number; flip: number }>();
@@ -76,10 +79,12 @@ export class SceneLayer {
     this.game = game;
     this.courseDirty = true;
     for (const s of this.objectSprites.values()) s.destroy();
+    for (const s of this.shadowSprites.values()) s.destroy();
     for (const s of this.golferSprites.values()) s.destroy();
     for (const s of this.ballSprites.values()) s.destroy();
     for (const s of this.staffSprites.values()) s.destroy();
     for (const f of this.courseFurniture) f.destroy();
+    this.shadowSprites.clear();
     this.courseFurniture = [];
     this.flagCloths = [];
     this.objectSprites.clear();
@@ -121,11 +126,31 @@ export class SceneLayer {
       const p = worldToScreen(cx, cy, t.heightAt(cx, cy));
       sprite.position.set(p.x, p.y);
       sprite.zIndex = depth(cx, cy);
+
+      // Soft contact shadow under shadowless cutout props (e.g. photoreal firs).
+      const prop = this.textures.prop(obj.kind, obj.id);
+      if (prop.shadow) {
+        let sh = this.shadowSprites.get(obj.id);
+        if (!sh) {
+          const rx = sprite.width * prop.shadow;
+          sh = new Graphics();
+          sh.ellipse(0, 0, rx * 1.4, rx * 0.58).fill({ color: 0x1c2b14, alpha: 0.1 });
+          sh.ellipse(0, 0, rx, rx * 0.42).fill({ color: 0x18260f, alpha: 0.24 });
+          this.shadowSprites.set(obj.id, sh);
+          this.shadowContainer.addChild(sh);
+        }
+        sh.position.set(p.x, p.y);
+      }
     }
     for (const [id, sprite] of this.objectSprites) {
       if (!liveIds.has(id)) {
         sprite.destroy();
         this.objectSprites.delete(id);
+        const sh = this.shadowSprites.get(id);
+        if (sh) {
+          sh.destroy();
+          this.shadowSprites.delete(id);
+        }
       }
     }
 

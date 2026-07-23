@@ -19,6 +19,9 @@ export interface PropTexture {
   ay: number;
   /** Base render scale (pre-rendered sprites are larger than the baked art). */
   scale?: number;
+  /** If set, the engine draws a soft contact shadow of this relative radius
+   * (fraction of sprite width) under the prop — for shadowless cutouts. */
+  shadow?: number;
 }
 
 const TEX_SIZE = 256;
@@ -286,7 +289,7 @@ const SURFACE_FILE_NAMES: Record<Surface, string> = {
  * Tilesets' Blender renders) replace the baked procedural props. Each entry
  * sets the ground-contact anchor and base scale for that sprite family.
  */
-const PROP_OVERRIDES: Record<string, { ax?: number; ay: number; scale: number }> = {
+const PROP_OVERRIDES: Record<string, { ax?: number; ay: number; scale: number; shadow?: number }> = {
   'clubhouse-0': { ax: 0.413, ay: 0.775, scale: 0.52 },
   'drinks-0': { ax: 0.405, ay: 0.799, scale: 0.21 },
   'snacks-0': { ax: 0.405, ay: 0.786, scale: 0.21 },
@@ -295,8 +298,10 @@ const PROP_OVERRIDES: Record<string, { ax?: number; ay: number; scale: number }>
   'tree-1': { ay: 0.9, scale: 0.85 }, // columnar cypress
   'tree-2': { ay: 0.88, scale: 0.88 },
   'tree-3': { ay: 0.88, scale: 0.85 },
-  'pine-0': { ay: 0.9, scale: 0.92 },
-  'pine-1': { ay: 0.9, scale: 0.92 },
+  // Photoreal Poly Haven firs (CC0), rendered at the game angle.
+  'pine-0': { ax: 0.482, ay: 0.975, scale: 0.34, shadow: 0.32 },
+  'pine-1': { ax: 0.491, ay: 0.964, scale: 0.36, shadow: 0.34 },
+  'pine-2': { ax: 0.433, ay: 0.972, scale: 0.34, shadow: 0.32 },
   'bush-0': { ay: 0.84, scale: 0.5 },
   'bush-1': { ay: 0.84, scale: 0.5 },
 };
@@ -315,7 +320,7 @@ async function loadPropOverride(key: string): Promise<PropTexture | null> {
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
     canvas.getContext('2d')!.drawImage(img, 0, 0);
-    return { texture: Texture.from(canvas), ax: spec.ax ?? 0.5, ay: spec.ay, scale: spec.scale };
+    return { texture: Texture.from(canvas), ax: spec.ax ?? 0.5, ay: spec.ay, scale: spec.scale, shadow: spec.shadow };
   } catch {
     return null;
   }
@@ -646,7 +651,8 @@ export class GameTextures {
 
   variantCount(kind: ObjectKind): number {
     if (kind === 'tree') return 4;
-    if (kind === 'pine' || kind === 'bush') return 2;
+    if (kind === 'pine') return 3;
+    if (kind === 'bush') return 2;
     return 1;
   }
 
