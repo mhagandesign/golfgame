@@ -156,19 +156,40 @@ export class TerrainLayer {
           g.poly([pNW.x, pNW.y, pSE.x, pSE.y, pSW.x, pSW.y]).fill({ ...style, color: shade(tint, 0.96) });
         }
 
-        // Grass tufts & wildflowers scattered over the rough.
+        // Wildflower-meadow detail on the rough: several grass tufts per tile
+        // plus occasional clover/daisy clusters, for the reference's lush look.
         if (surface === Surface.Rough) {
-          const h1 = hash2(x, y);
-          if (h1 > 0.55) {
-            const u = hash2(x + 31, y);
-            const v = hash2(x, y + 57);
-            const px = pSW.x + (pNE.x - pSW.x) * (0.2 + u * 0.6);
-            const py = pNW.y + (pSE.y - pNW.y) * (0.25 + v * 0.5);
-            const tuftC = shade(0x5c8a3e, 0.9 + u * 0.3);
+          for (let s = 0; s < 4; s++) {
+            const u = hash2(x * 4 + s, y * 7 + 13);
+            if (u < 0.4) continue; // bare patches keep it natural
+            const v = hash2(x * 9 + 3, y * 5 + s * 17);
+            const px = pSW.x + (pNE.x - pSW.x) * (0.15 + u * 0.7);
+            const py = pNW.y + (pSE.y - pNW.y) * (0.2 + v * 0.6);
+            const tuftC = shade(0x5c8a3e, 0.82 + u * 0.38);
             for (let b = -1; b <= 1; b++) {
-              g.moveTo(px + b * 1.6, py).lineTo(px + b * 2.4, py - 3.2 - u * 1.5).stroke({ color: tuftC, width: 1 });
+              g.moveTo(px + b * 1.4, py)
+                .lineTo(px + b * 2 + 0.8, py - 2.6 - u * 1.7)
+                .stroke({ color: tuftC, width: 1 });
             }
-            if (h1 > 0.965) g.circle(px + 1, py - 4, 1.1).fill(v > 0.5 ? 0xf0e04e : 0xf0f0f0);
+            // Sparse flower clusters: white daisies, yellow buttercups, pink clover.
+            const fh = hash2(x * 13 + s * 31, y * 11 + 7);
+            if (fh > 0.88) {
+              const fc = fh > 0.966 ? 0xf6e85c : fh > 0.925 ? 0xf4f4ee : 0xe89ac0;
+              for (let k = 0; k < 3; k++) {
+                const a = k * 2.1 + u * 3;
+                g.circle(px + Math.cos(a) * 1.3, py - 2.8 + Math.sin(a) * 0.9, 0.85).fill(fc);
+              }
+              if (fc === 0xf4f4ee) g.circle(px, py - 2.8, 0.6).fill(0xf0d040); // daisy centre
+            }
+          }
+        }
+        // A whisper of tiny clover on fairway/tee edges — lush but still mown.
+        if (surface === Surface.Fairway) {
+          const cf = hash2(x * 17 + 5, y * 19 + 2);
+          if (cf > 0.9) {
+            const px = pSW.x + (pNE.x - pSW.x) * (0.3 + hash2(x, y + 3) * 0.4);
+            const py = pNW.y + (pSE.y - pNW.y) * (0.35 + hash2(x + 5, y) * 0.3);
+            g.circle(px, py, 0.7).fill({ color: 0xf0f0e4, alpha: 0.8 });
           }
         }
 
