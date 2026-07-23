@@ -6,6 +6,7 @@ import { SceneLayer } from './sceneLayer';
 import { TerrainLayer } from './terrainLayer';
 import { screenToWorld, worldToScreen } from './iso';
 import { mix } from './colors';
+import { fbm } from './noise';
 import { Pt, holeLegs } from '../core/course/course';
 
 /** Ambient light color for a given minute of day. */
@@ -57,11 +58,12 @@ export class Renderer {
     host.appendChild(this.app.canvas);
 
     this.camera = new Camera(this.world);
-    this.textures = GameTextures.build(this.app.renderer);
+    this.textures = await GameTextures.build(this.app.renderer);
     this.terrainLayer = new TerrainLayer(this.game.terrain, this.textures);
     this.sceneLayer = new SceneLayer(this.game, this.textures);
 
     this.world.addChild(this.terrainLayer.container);
+    this.world.addChild(this.buildMacroOverlay());
     this.world.addChild(this.routes);
     this.world.addChild(this.sceneLayer.container);
     this.world.addChild(this.highlight);
@@ -94,6 +96,43 @@ export class Renderer {
     this.terrainLayer.setTerrain(game.terrain);
     this.sceneLayer.setGame(game);
     this.centerOnMap();
+  }
+
+  /**
+   * Large-scale tonal variation multiplied over the terrain — the broad
+   * light/dark patchiness that makes real aerial turf read as organic.
+   */
+  private buildMacroOverlay(): Sprite {
+    const size = 512;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d')!;
+    const img = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const n = fbm(x / size, y / size, 4, 5, 4242);
+        // 0.88 .. 1.0 multiply range, kept subtle.
+        const v = Math.round(255 * (0.9 + Math.min(1, Math.max(0, n)) * 0.1));
+        const i = (y * size + x) * 4;
+        img.data[i] = v;
+        img.data[i + 1] = v;
+        img.data[i + 2] = v;
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const sprite = new Sprite(Texture.from(c));
+    const t = this.game.terrain;
+    const xMin = -t.h * 32;
+    const width = (t.w + t.h) * 32;
+    const yMin = -170;
+    const height = (t.w + t.h) * 16 + 200;
+    sprite.position.set(xMin, yMin);
+    sprite.width = width;
+    sprite.height = height;
+    sprite.blendMode = 'multiply';
+    return sprite;
   }
 
   centerOnMap(): void {

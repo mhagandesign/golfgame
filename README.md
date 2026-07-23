@@ -51,6 +51,15 @@ The core loop:
 Saves go to localStorage (💾 Save) and can be exported/imported as `.golf.json`
 files.
 
+## Art pipeline
+
+All art is generated at startup — FBM-noise terrain textures (grass with
+directional blades and clumping, raked bunker sand, caustic water, pebbled
+paths) and GPU-baked prop sprites (stippled tree canopies, isometric
+buildings). **Photographic CC0 textures can be dropped into
+`public/textures/`** (from ambientCG / Poly Haven) and are used automatically
+— see `public/textures/README.md` for names and suggested assets.
+
 ## Architecture
 
 - `src/core/` — pure, deterministic simulation (no rendering imports):

@@ -178,6 +178,27 @@ export class TerrainLayer {
           }
         }
 
+        // Shoreline smoothing: when two adjacent edges of this land tile
+        // both border water, chamfer the shared corner with water so pond
+        // outlines read as octagonal curves instead of tile staircases.
+        const isWater = (nx: number, ny: number) => t.inBounds(nx, ny) && t.surfaceAt(nx, ny) === Surface.Water;
+        const midpoint = (p: { x: number; y: number }, q: { x: number; y: number }) => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+        const chamfers: Array<[boolean, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]> = [
+          [isWater(x + 1, y) && isWater(x, y - 1), midpoint(pNW, pNE), pNE, midpoint(pNE, pSE)], // NE corner
+          [isWater(x + 1, y) && isWater(x, y + 1), midpoint(pNE, pSE), pSE, midpoint(pSE, pSW)], // SE corner
+          [isWater(x - 1, y) && isWater(x, y + 1), midpoint(pSE, pSW), pSW, midpoint(pSW, pNW)], // SW corner
+          [isWater(x - 1, y) && isWater(x, y - 1), midpoint(pSW, pNW), pNW, midpoint(pNW, pNE)], // NW corner
+        ];
+        for (const [hit, m1, corner, m2] of chamfers) {
+          if (!hit) continue;
+          g.poly([m1.x, m1.y, corner.x, corner.y, m2.x, m2.y]).fill(SHORE_COLOR);
+          const inset = (p: { x: number; y: number }) => ({ x: corner.x + (p.x - corner.x) * 0.72, y: corner.y + (p.y - corner.y) * 0.72 });
+          const i1 = inset(m1);
+          const i2 = inset(m2);
+          g.poly([i1.x, i1.y, corner.x, corner.y, i2.x, i2.y]).fill(0x3d81b4);
+          g.moveTo(i1.x, i1.y).lineTo(i2.x, i2.y).stroke({ color: 0xe8f4f8, width: 1.2, alpha: 0.5 });
+        }
+
         // Map border skirt.
         if (y === t.h - 1) {
           const bSW = worldToScreen(x, y + 1, -1);
@@ -218,6 +239,24 @@ export class TerrainLayer {
       const ia = { x: a.x + (cxm - a.x) * 0.3, y: a.y + (cym - a.y) * 0.3 };
       const ib = { x: b.x + (cxm - b.x) * 0.3, y: b.y + (cym - b.y) * 0.3 };
       wg.poly([a.x, a.y, b.x, b.y, ib.x, ib.y, ia.x, ia.y]).fill({ color: 0x6cb2dc, alpha: 0.45 });
+      // Foam line hugging the shore.
+      wg.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ color: 0xe8f4f8, width: 1.4, alpha: 0.55 });
+    }
+
+    // Mirror chamfer: where this water tile pokes into land on two adjacent
+    // sides, cut the corner back with shore so the outline stays smooth.
+    const isLand = (nx: number, ny: number) => t.inBounds(nx, ny) && t.surfaceAt(nx, ny) !== Surface.Water;
+    const midpoint = (p: { x: number; y: number }, q: { x: number; y: number }) => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+    const chamfers: Array<[boolean, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]> = [
+      [isLand(x + 1, y) && isLand(x, y - 1), midpoint(p0, p1), p1, midpoint(p1, p2)],
+      [isLand(x + 1, y) && isLand(x, y + 1), midpoint(p1, p2), p2, midpoint(p2, p3)],
+      [isLand(x - 1, y) && isLand(x, y + 1), midpoint(p2, p3), p3, midpoint(p3, p0)],
+      [isLand(x - 1, y) && isLand(x, y - 1), midpoint(p3, p0), p0, midpoint(p0, p1)],
+    ];
+    for (const [hit, m1, corner, m2] of chamfers) {
+      if (!hit) continue;
+      wg.poly([m1.x, m1.y, corner.x, corner.y, m2.x, m2.y]).fill(SHORE_COLOR);
+      wg.moveTo(m1.x, m1.y).lineTo(m2.x, m2.y).stroke({ color: 0xe8f4f8, width: 1.4, alpha: 0.55 });
     }
 
     // A couple of static wave glints; the layer tint animates them.
