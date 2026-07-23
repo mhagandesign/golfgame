@@ -17,6 +17,8 @@ export interface PropTexture {
   /** Anchor so the sprite's origin sits at the prop's ground contact point. */
   ax: number;
   ay: number;
+  /** Base render scale (pre-rendered sprites are larger than the baked art). */
+  scale?: number;
 }
 
 const TEX_SIZE = 256;
@@ -278,6 +280,42 @@ const SURFACE_FILE_NAMES: Record<Surface, string> = {
   [Surface.Water]: 'water',
   [Surface.Path]: 'path',
 };
+
+/**
+ * Pre-rendered prop sprites in `public/sprites/<key>.png` (e.g. Reiner's
+ * Tilesets' Blender renders) replace the baked procedural props. Each entry
+ * sets the ground-contact anchor and base scale for that sprite family.
+ */
+const PROP_OVERRIDES: Record<string, { ay: number; scale: number }> = {
+  'tree-0': { ay: 0.88, scale: 0.88 },
+  'tree-1': { ay: 0.9, scale: 0.85 }, // columnar cypress
+  'tree-2': { ay: 0.88, scale: 0.88 },
+  'tree-3': { ay: 0.88, scale: 0.85 },
+  'pine-0': { ay: 0.9, scale: 0.92 },
+  'pine-1': { ay: 0.9, scale: 0.92 },
+  'bush-0': { ay: 0.84, scale: 0.5 },
+  'bush-1': { ay: 0.84, scale: 0.5 },
+};
+
+async function loadPropOverride(key: string): Promise<PropTexture | null> {
+  const spec = PROP_OVERRIDES[key];
+  if (!spec) return null;
+  try {
+    const url = `/sprites/${key}.png`;
+    const resp = await fetch(url, { method: 'HEAD' });
+    if (!resp.ok || !(resp.headers.get('content-type') ?? '').startsWith('image/')) return null;
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext('2d')!.drawImage(img, 0, 0);
+    return { texture: Texture.from(canvas), ax: 0.5, ay: spec.ay, scale: spec.scale };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Optional real-photo override: if `public/textures/<name>.jpg` (or .png)
@@ -593,6 +631,12 @@ export class GameTextures {
     bake('drinks-0', (g) => drawKioskProp(g, 0x3c78b4, 0x4a90d9, 0xe8f0f8, '🥤'));
     bake('snacks-0', (g) => drawKioskProp(g, 0xb46a3c, 0xd9534f, 0xf8f0e0, '🌭'));
     bake('toilet-0', (g) => drawKioskProp(g, 0x5a7a62, 0x6a9a72, 0xe0e8e2, '🚻'));
+
+    // Pre-rendered sprite overrides (see public/sprites/) trump the baked art.
+    for (const key of Object.keys(PROP_OVERRIDES)) {
+      const override = await loadPropOverride(key);
+      if (override) t.props.set(key, override);
+    }
     return t;
   }
 

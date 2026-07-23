@@ -53,12 +53,13 @@ files.
 
 ## Art pipeline
 
-All art is generated at startup — FBM-noise terrain textures (grass with
-directional blades and clumping, raked bunker sand, caustic water, pebbled
-paths) and GPU-baked prop sprites (stippled tree canopies, isometric
-buildings). **Photographic CC0 textures can be dropped into
-`public/textures/`** (from ambientCG / Poly Haven) and are used automatically
-— see `public/textures/README.md` for names and suggested assets.
+Terrain uses **photographic CC0 textures from ambientCG** (grass, bunker
+sand, gravel — see `public/textures/README.md`), and scenery uses
+**pre-rendered 3D sprites from Reiner's Tilesets** (trees, pines, cypresses,
+bushes — see `public/sprites/README.md` for credits). Everything else — water
+caustics, buildings, kiosks, people, shorelines — is generated at startup by
+the FBM/canvas pipeline in `src/render/textures.ts`, which also lets any
+prop or surface be overridden by dropping image files into `public/`.
 
 ## Architecture
 

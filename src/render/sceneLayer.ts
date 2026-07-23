@@ -106,8 +106,11 @@ export class SceneLayer {
         const prop = this.textures.prop(obj.kind, obj.id);
         sprite = new Sprite(prop.texture);
         sprite.anchor.set(prop.ax, prop.ay);
+        const base = prop.scale ?? 1;
         if (obj.kind !== 'clubhouse' && obj.kind !== 'drinks' && obj.kind !== 'snacks' && obj.kind !== 'toilet') {
-          sprite.scale.set(0.95 + ((obj.id * 37) % 9) * 0.055);
+          sprite.scale.set(base * (0.95 + ((obj.id * 37) % 9) * 0.055));
+        } else {
+          sprite.scale.set(base);
         }
         this.objectSprites.set(obj.id, sprite);
         this.container.addChild(sprite);
