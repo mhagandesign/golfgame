@@ -28,9 +28,11 @@ body,
   align-items: center;
   gap: 10px;
   padding: 6px 12px;
-  background: linear-gradient(#2d3b2aee, #24301fdd);
+  background: linear-gradient(#2d3b2af2, #223020e0);
+  backdrop-filter: blur(6px);
   color: #e8f0da;
-  border-bottom: 1px solid #4a5c40;
+  border-bottom: 1px solid #55684a;
+  box-shadow: 0 2px 12px #0006;
   font-size: 13px;
   z-index: 10;
   flex-wrap: wrap;
@@ -107,9 +109,11 @@ body,
   display: flex;
   flex-direction: column;
   gap: 3px;
-  background: #24301fee;
-  border: 1px solid #4a5c40;
-  border-radius: 10px;
+  background: #212d1ee8;
+  backdrop-filter: blur(6px);
+  border: 1px solid #55684a;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px #0007;
   padding: 8px;
   z-index: 10;
   max-height: calc(100vh - 110px);
@@ -149,9 +153,11 @@ body,
   top: 52px;
   right: 8px;
   width: 250px;
-  background: #24301fee;
-  border: 1px solid #4a5c40;
-  border-radius: 10px;
+  background: #212d1ee8;
+  backdrop-filter: blur(6px);
+  border: 1px solid #55684a;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px #0007;
   padding: 10px;
   color: #e8f0da;
   font-size: 12.5px;
@@ -281,7 +287,10 @@ body,
 #title-screen {
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse at 50% 30%, #3c5a33, #1a2617 75%);
+  background:
+    radial-gradient(ellipse at 20% 80%, #2c4a2688 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 20%, #4a6a3866 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 30%, #3c5a33, #16200f 78%);
   display: flex;
   flex-direction: column;
   align-items: center;

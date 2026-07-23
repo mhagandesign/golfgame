@@ -1,126 +1,49 @@
-import { Container, Graphics, Text, TextStyle } from 'pixi.js';
-import { Game, WorldObject, OBJECT_FOOTPRINT } from '../core/game';
+import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
+import { Game, OBJECT_FOOTPRINT } from '../core/game';
 import { Golfer } from '../core/sim/golfer';
 import { Groundskeeper } from '../core/sim/staff';
 import { SHIRT_COLORS, shade } from './colors';
 import { HEIGHT_STEP, worldToScreen } from './iso';
+import { GameTextures } from './textures';
 
 function depth(fx: number, fy: number): number {
   return (fx + fy) * 100;
 }
 
-function drawKiosk(g: Graphics, body: number, roof: number, sign: string): void {
-  g.ellipse(0, 0, 13, 5).fill({ color: 0x000000, alpha: 0.2 });
-  g.poly([-12, -2, 0, 4, 0, -16, -12, -22]).fill(shade(body, 0.85));
-  g.poly([12, -2, 0, 4, 0, -16, 12, -22]).fill(body);
-  g.poly([-14, -20, 0, -13, 14, -20, 0, -27]).fill(roof);
-  const label = new Text({ text: sign, style: new TextStyle({ fontSize: 10 }) });
-  label.anchor.set(0.5);
-  label.position.set(0, -32);
-  g.addChild(label);
-}
+const SKIN_TONES = [0xe8c39a, 0xd4a276, 0xa8764a, 0x8a5a34, 0xf0d0b0];
 
-function drawObject(g: Graphics, obj: WorldObject): void {
-  switch (obj.kind) {
-    case 'drinks':
-      drawKiosk(g, 0x3c78b4, 0xd8e8f4, '🥤');
-      return;
-    case 'snacks':
-      drawKiosk(g, 0xb46a3c, 0xf0d8a8, '🌭');
-      return;
-    case 'toilet':
-      drawKiosk(g, 0x5a7a62, 0xc8d8cc, '🚻');
-      return;
-    default:
-      break;
-  }
-  // Natural scenery gets a soft shadow and per-instance size variation.
-  if (obj.kind !== 'clubhouse') {
-    g.ellipse(0, -1, 12, 5).fill({ color: 0x000000, alpha: 0.18 });
-    const s = 0.82 + ((obj.id * 37) % 9) * 0.045;
-    g.scale.set(s);
-  }
-  switch (obj.kind) {
-    case 'tree': {
-      g.roundRect(-3, -14, 6, 14, 2).fill(0x7a5a3a);
-      g.circle(0, -26, 15).fill(0x4e8a3c);
-      g.circle(-9, -19, 10).fill(0x5c9c46);
-      g.circle(9, -19, 10).fill(0x467f36);
-      g.circle(0, -30, 9).fill(0x63a84e);
-      break;
-    }
-    case 'pine': {
-      g.rect(-2.5, -10, 5, 10).fill(0x6e4f33);
-      g.poly([-14, -8, 14, -8, 0, -30]).fill(0x3d6e3a);
-      g.poly([-11, -18, 11, -18, 0, -38]).fill(0x477d43);
-      g.poly([-8, -28, 8, -28, 0, -46]).fill(0x528c4d);
-      break;
-    }
-    case 'bush': {
-      g.ellipse(0, -6, 11, 8).fill(0x55924a);
-      g.ellipse(-5, -9, 7, 5).fill(0x62a355);
-      break;
-    }
-    case 'rock': {
-      g.ellipse(0, -4, 10, 7).fill(0x9a9a92);
-      g.ellipse(-3, -7, 5, 4).fill(0xb0b0a8);
-      break;
-    }
-    case 'flowers': {
-      g.ellipse(0, -3, 12, 7).fill(0x5f9a4d);
-      for (const [fx, fy, c] of [
-        [-6, -5, 0xe86fa8],
-        [0, -7, 0xf0e04e],
-        [6, -4, 0xe8654f],
-        [2, -2, 0xffffff],
-      ] as const) {
-        g.circle(fx, fy, 2).fill(c);
-      }
-      break;
-    }
-    case 'clubhouse': {
-      // A 3x3-footprint isometric building with a gabled roof.
-      const w = 88;
-      const hw = w / 2;
-      const wallH = 34;
-      // Walls (front-left and front-right faces).
-      g.poly([-hw, -wallH, 0, -wallH + hw / 2, 0, hw / 2, -hw, 0]).fill(0xb08d62);
-      g.poly([hw, -wallH, 0, -wallH + hw / 2, 0, hw / 2, hw, 0]).fill(0x94734e);
-      // Roof.
-      g.poly([-hw - 4, -wallH, 0, -wallH + hw / 2 - 2, 0, -wallH - 22, -hw - 4, -wallH - 10]).fill(0x7c4a35);
-      g.poly([hw + 4, -wallH, 0, -wallH + hw / 2 - 2, 0, -wallH - 22, hw + 4, -wallH - 10]).fill(0x5f382a);
-      // Door & windows.
-      g.roundRect(-hw / 2 - 8, -20, 12, 18, 2).fill(0x4a3320);
-      g.rect(hw / 2 - 6, -24, 10, 8).fill(0xd8e8f0);
-      g.rect(hw / 2 + 8, -19, 10, 8).fill(0xc8dce8);
-      break;
-    }
-  }
-}
-
-function drawGolfer(g: Graphics, golfer: Golfer, bob: number): void {
-  const shirt = SHIRT_COLORS[golfer.shirt % SHIRT_COLORS.length];
+function drawPerson(
+  g: Graphics,
+  opts: { shirt: number; trousers: number; cap: number; skin: number; bob: number; swing?: number; mowing?: boolean },
+): void {
+  const { shirt, trousers, cap, skin, bob } = opts;
   g.ellipse(0, 0, 6, 3).fill({ color: 0x000000, alpha: 0.25 });
-  g.roundRect(-2.5, -8 - bob, 5, 7 + bob, 2).fill(0x3a4450); // trousers
-  g.roundRect(-3.5, -15 - bob, 7, 8, 2).fill(shirt);
-  g.circle(0, -18 - bob, 3.5).fill(0xe8c39a);
-  g.rect(-3.5, -21.5 - bob, 7, 2).fill(shade(shirt, 0.7)); // cap
-  if (golfer.state === 'preparing') {
-    g.rect(3, -14, 1.5, 12).fill(0x888888); // club
+  // Legs.
+  g.roundRect(-2.6, -8 - bob, 2.2, 7 + bob, 1).fill(trousers);
+  g.roundRect(0.4, -8 - bob, 2.2, 7 + bob, 1).fill(shade(trousers, 0.85));
+  // Torso.
+  g.roundRect(-3.5, -15 - bob, 7, 8.5, 2.5).fill(shirt);
+  g.roundRect(-3.5, -15 - bob, 3.2, 8.5, 2.5).fill(shade(shirt, 1.12)); // lit side
+  // Arms.
+  g.roundRect(-4.6, -14 - bob, 1.8, 6, 1).fill(shade(shirt, 0.9));
+  g.roundRect(2.8, -14 - bob, 1.8, 6, 1).fill(shade(shirt, 0.8));
+  // Head + cap with brim.
+  g.circle(0, -18.5 - bob, 3.4).fill(skin);
+  g.rect(-3.6, -21.8 - bob, 7.2, 2.2).fill(cap);
+  g.rect(-5.2, -20.2 - bob, 3, 1.2).fill(shade(cap, 0.85));
+  // Club, swinging while preparing.
+  if (opts.swing !== undefined) {
+    const a = -0.5 + Math.sin(opts.swing) * 0.9;
+    const len = 12;
+    const bx = 3.4;
+    const by = -12 - bob;
+    g.moveTo(bx, by).lineTo(bx + Math.sin(a) * len, by + Math.cos(a) * len).stroke({ color: 0x9a9a9a, width: 1.6 });
   }
-}
-
-function drawGroundskeeper(g: Graphics, gk: Groundskeeper, bob: number): void {
-  g.ellipse(0, 0, 6, 3).fill({ color: 0x000000, alpha: 0.25 });
-  g.roundRect(-2.5, -8 - bob, 5, 7 + bob, 2).fill(0x4a5a38); // work trousers
-  g.roundRect(-3.5, -15 - bob, 7, 8, 2).fill(0xc8a03c); // hi-vis vest
-  g.circle(0, -18 - bob, 3.5).fill(0xe8c39a);
-  g.rect(-3.5, -21.5 - bob, 7, 2).fill(0xa04030); // red cap
-  if (gk.state === 'mowing') {
-    // Push mower.
-    g.roundRect(4, -7, 9, 5, 1).fill(0x777777);
-    g.circle(5.5, -1.5, 2).fill(0x333333);
-    g.circle(11.5, -1.5, 2).fill(0x333333);
+  if (opts.mowing) {
+    g.roundRect(4, -7, 9, 5, 1).fill(0x8a2f2a);
+    g.roundRect(5, -8.5, 7, 2, 1).fill(0x666666);
+    g.circle(5.5, -1.5, 2).fill(0x2c2c2c);
+    g.circle(11.5, -1.5, 2).fill(0x2c2c2c);
   }
 }
 
@@ -128,18 +51,24 @@ const labelStyle = new TextStyle({ fontFamily: 'sans-serif', fontSize: 11, fill:
 
 /**
  * Everything that sits on the terrain: props, buildings, hole furniture,
- * golfers and balls. Depth-sorted every frame (agents move).
+ * golfers and balls. Props are pre-baked texture sprites; people are cheap
+ * dynamic Graphics so they can bob, swing and flip. Depth-sorted every frame.
  */
 export class SceneLayer {
   readonly container = new Container();
-  private objectSprites = new Map<number, Graphics>();
+  private objectSprites = new Map<number, Sprite>();
   private golferSprites = new Map<number, Graphics>();
+  private golferFacing = new Map<number, { x: number; flip: number }>();
   private ballSprites = new Map<number, Graphics>();
   private staffSprites = new Map<number, Graphics>();
   private courseFurniture: Graphics[] = [];
+  private flagCloths: Array<{ g: Graphics; phase: number }> = [];
   private courseDirty = true;
 
-  constructor(private game: Game) {
+  constructor(
+    private game: Game,
+    private textures: GameTextures,
+  ) {
     this.container.sortableChildren = true;
   }
 
@@ -152,8 +81,10 @@ export class SceneLayer {
     for (const s of this.staffSprites.values()) s.destroy();
     for (const f of this.courseFurniture) f.destroy();
     this.courseFurniture = [];
+    this.flagCloths = [];
     this.objectSprites.clear();
     this.golferSprites.clear();
+    this.golferFacing.clear();
     this.ballSprites.clear();
     this.staffSprites.clear();
   }
@@ -166,14 +97,18 @@ export class SceneLayer {
     const game = this.game;
     const t = game.terrain;
 
-    // ── Objects (static; add/remove diffs) ──
+    // ── Props: pre-baked sprites, add/remove diffs ──
     const liveIds = new Set<number>();
     for (const obj of game.objects) {
       liveIds.add(obj.id);
       let sprite = this.objectSprites.get(obj.id);
       if (!sprite) {
-        sprite = new Graphics();
-        drawObject(sprite, obj);
+        const prop = this.textures.prop(obj.kind, obj.id);
+        sprite = new Sprite(prop.texture);
+        sprite.anchor.set(prop.ax, prop.ay);
+        if (obj.kind !== 'clubhouse' && obj.kind !== 'drinks' && obj.kind !== 'snacks' && obj.kind !== 'toilet') {
+          sprite.scale.set(0.82 + ((obj.id * 37) % 9) * 0.045);
+        }
         this.objectSprites.set(obj.id, sprite);
         this.container.addChild(sprite);
       }
@@ -191,25 +126,37 @@ export class SceneLayer {
       }
     }
 
-    // ── Hole furniture: flags & tee markers ──
+    // ── Hole furniture: flags, cloth & tee markers ──
     if (this.courseDirty) {
       this.courseDirty = false;
       for (const f of this.courseFurniture) f.destroy();
       this.courseFurniture = [];
+      this.flagCloths = [];
       for (const hole of game.holes) {
-        const flag = new Graphics();
-        flag.rect(-1, -34, 2, 34).fill(0xeeeeee);
-        flag.poly([1, -34, 15, -29, 1, -24]).fill(0xd9534f);
-        flag.circle(0, 0, 2.2).fill(0x222222);
         const cupC = { x: hole.cup.x + 0.5, y: hole.cup.y + 0.5 };
         const fp = worldToScreen(cupC.x, cupC.y, t.heightAt(cupC.x, cupC.y));
-        flag.position.set(fp.x, fp.y);
-        flag.zIndex = depth(cupC.x, cupC.y);
-        this.courseFurniture.push(flag);
-        this.container.addChild(flag);
+
+        const pole = new Graphics();
+        pole.ellipse(0, 0, 4, 1.8).fill({ color: 0x1c2b14, alpha: 0.3 });
+        pole.circle(0, 0, 2.2).fill(0x222222);
+        pole.circle(0, 0, 1.2).fill(0x111111);
+        pole.rect(-0.8, -36, 1.6, 36).fill(0xf0f0f0);
+        pole.rect(-0.8, -36, 0.7, 36).fill(0xc8c8c8);
+        pole.position.set(fp.x, fp.y);
+        pole.zIndex = depth(cupC.x, cupC.y);
+        this.courseFurniture.push(pole);
+        this.container.addChild(pole);
+
+        const cloth = new Graphics();
+        cloth.position.set(fp.x, fp.y);
+        cloth.zIndex = depth(cupC.x, cupC.y) + 1;
+        this.courseFurniture.push(cloth);
+        this.flagCloths.push({ g: cloth, phase: hole.number * 1.7 });
+        this.container.addChild(cloth);
 
         const marker = new Graphics();
-        marker.roundRect(-9, -14, 18, 14, 3).fill(0x2f4632).stroke({ color: 0xffffff, width: 1 });
+        marker.roundRect(-9, -14, 18, 14, 3).fill(0x2f4632).stroke({ color: 0xd8e8c8, width: 1 });
+        marker.roundRect(-9, -14, 18, 4, 3).fill(0x3d5a40);
         const teeC = { x: hole.tee.x + 0.5, y: hole.tee.y + 0.5 };
         const tp = worldToScreen(teeC.x, teeC.y, t.heightAt(teeC.x, teeC.y));
         marker.position.set(tp.x, tp.y - 6);
@@ -223,6 +170,22 @@ export class SceneLayer {
       }
     }
 
+    // Waving flag cloth.
+    for (const { g, phase } of this.flagCloths) {
+      g.clear();
+      const w1 = Math.sin(timeSec * 3.2 + phase) * 2.2;
+      const w2 = Math.sin(timeSec * 3.2 + phase + 1.1) * 3;
+      g.moveTo(0.8, -35)
+        .bezierCurveTo(6, -34 + w1 * 0.4, 10, -33 + w1, 15, -31.5 + w2)
+        .lineTo(14, -27.5 + w2)
+        .bezierCurveTo(9, -28.5 + w1, 6, -29.5 + w1 * 0.4, 0.8, -29.5)
+        .closePath()
+        .fill(0xd9534f);
+      g.moveTo(0.8, -35)
+        .bezierCurveTo(6, -34 + w1 * 0.4, 10, -33 + w1, 15, -31.5 + w2)
+        .stroke({ color: 0xb03c38, width: 1 });
+    }
+
     // ── Golfers & balls ──
     const liveGolfers = new Set<number>();
     for (const golfer of game.golfers) {
@@ -233,12 +196,27 @@ export class SceneLayer {
         this.golferSprites.set(golfer.id, sprite);
         this.container.addChild(sprite);
       }
+      // Face the walking direction (screen-x flip).
+      const face = this.golferFacing.get(golfer.id) ?? { x: golfer.pos.x - golfer.pos.y, flip: 1 };
+      const screenX = golfer.pos.x - golfer.pos.y;
+      if (Math.abs(screenX - face.x) > 0.01) face.flip = screenX > face.x ? 1 : -1;
+      face.x = screenX;
+      this.golferFacing.set(golfer.id, face);
+
       sprite.clear();
       const walking =
         golfer.state === 'walking-to-tee' || golfer.state === 'walking-to-ball' ||
         golfer.state === 'walking-to-amenity' || golfer.state === 'leaving';
       const bob = walking ? Math.abs(Math.sin(timeSec * 9 + golfer.id)) * 1.6 : 0;
-      drawGolfer(sprite, golfer, bob);
+      drawPerson(sprite, {
+        shirt: SHIRT_COLORS[golfer.shirt % SHIRT_COLORS.length],
+        trousers: 0x3a4450,
+        cap: shade(SHIRT_COLORS[golfer.shirt % SHIRT_COLORS.length], 0.7),
+        skin: SKIN_TONES[golfer.id % SKIN_TONES.length],
+        bob,
+        swing: golfer.state === 'preparing' ? timeSec * 7 + golfer.id : undefined,
+      });
+      sprite.scale.x = face.flip;
       const gp = worldToScreen(golfer.pos.x, golfer.pos.y, t.heightAt(golfer.pos.x, golfer.pos.y));
       sprite.position.set(gp.x, gp.y);
       sprite.zIndex = depth(golfer.pos.x, golfer.pos.y);
@@ -275,6 +253,7 @@ export class SceneLayer {
       if (!liveGolfers.has(id)) {
         sprite.destroy();
         this.golferSprites.delete(id);
+        this.golferFacing.delete(id);
         const ball = this.ballSprites.get(id);
         if (ball) {
           ball.destroy();
@@ -295,7 +274,14 @@ export class SceneLayer {
       }
       sprite.clear();
       const bob = gk.state === 'walking' ? Math.abs(Math.sin(timeSec * 9 + gk.id)) * 1.6 : 0;
-      drawGroundskeeper(sprite, gk, bob);
+      drawPerson(sprite, {
+        shirt: 0xc8a03c,
+        trousers: 0x4a5a38,
+        cap: 0xa04030,
+        skin: SKIN_TONES[gk.id % SKIN_TONES.length],
+        bob,
+        mowing: gk.state === 'mowing',
+      });
       const sp = worldToScreen(gk.pos.x, gk.pos.y, t.heightAt(gk.pos.x, gk.pos.y));
       sprite.position.set(sp.x, sp.y);
       sprite.zIndex = depth(gk.pos.x, gk.pos.y);

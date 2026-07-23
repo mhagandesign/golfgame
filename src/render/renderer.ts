@@ -1,4 +1,5 @@
-import { Application, Container, Graphics } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { GameTextures } from './textures';
 import { Game } from '../core/game';
 import { Camera } from './camera';
 import { SceneLayer } from './sceneLayer';
@@ -37,6 +38,8 @@ export class Renderer {
   private rain = new Graphics();
   private rainDrops: Array<{ x: number; y: number; speed: number }> = [];
   private elapsed = 0;
+  textures!: GameTextures;
+  private vignette!: Sprite;
 
   private game: Game;
 
@@ -54,14 +57,29 @@ export class Renderer {
     host.appendChild(this.app.canvas);
 
     this.camera = new Camera(this.world);
-    this.terrainLayer = new TerrainLayer(this.game.terrain);
-    this.sceneLayer = new SceneLayer(this.game);
+    this.textures = GameTextures.build(this.app.renderer);
+    this.terrainLayer = new TerrainLayer(this.game.terrain, this.textures);
+    this.sceneLayer = new SceneLayer(this.game, this.textures);
 
     this.world.addChild(this.terrainLayer.container);
     this.world.addChild(this.routes);
     this.world.addChild(this.sceneLayer.container);
     this.world.addChild(this.highlight);
     this.app.stage.addChild(this.world);
+
+    // Soft painterly vignette over the whole scene.
+    const vc = document.createElement('canvas');
+    vc.width = 512;
+    vc.height = 512;
+    const vctx = vc.getContext('2d')!;
+    const grad = vctx.createRadialGradient(256, 256, 150, 256, 256, 360);
+    grad.addColorStop(0, 'rgba(10,20,8,0)');
+    grad.addColorStop(1, 'rgba(10,20,8,0.32)');
+    vctx.fillStyle = grad;
+    vctx.fillRect(0, 0, 512, 512);
+    this.vignette = new Sprite(Texture.from(vc));
+    this.app.stage.addChild(this.vignette);
+
     this.app.stage.addChild(this.rain);
 
     for (let i = 0; i < 140; i++) {
@@ -165,6 +183,9 @@ export class Renderer {
     if (this.game.weather === 'rain') ambient = mix(ambient, 0x8898a8, 0.45);
     else if (this.game.weather === 'cloud') ambient = mix(ambient, 0xc8ccd4, 0.25);
     this.world.tint = ambient;
+
+    this.vignette.width = this.app.screen.width;
+    this.vignette.height = this.app.screen.height;
 
     this.updateRain(dtSec);
   }

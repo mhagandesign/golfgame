@@ -2,9 +2,10 @@ import { Container, Graphics } from 'pixi.js';
 import { Surface, Terrain } from '../core/terrain/terrain';
 import { SURFACE_COLORS, shade, tileNoise, mix, hash2 } from './colors';
 import { HEIGHT_STEP, worldToScreen } from './iso';
+import { GameTextures } from './textures';
 
 const CHUNK = 16;
-const WEAR_COLOR = 0xb49a58;
+const WEAR_COLOR = 0xc8a464;
 const SHORE_COLOR = 0xdcc894;
 
 /**
@@ -20,7 +21,10 @@ export class TerrainLayer {
   private cw: number;
   private ch: number;
 
-  constructor(private terrain: Terrain) {
+  constructor(
+    private terrain: Terrain,
+    private textures: GameTextures,
+  ) {
     this.container.sortableChildren = true;
     this.cw = Math.ceil(terrain.w / CHUNK);
     this.ch = Math.ceil(terrain.h / CHUNK);
@@ -113,55 +117,65 @@ export class TerrainLayer {
         bright += tileNoise(x, y);
         // Mowing stripes across fairways and tees.
         if (surface === Surface.Fairway || surface === Surface.Tee) {
-          bright += Math.floor((x + y) / 2) % 2 === 0 ? 0.045 : -0.045;
+          bright += Math.floor((x + y) / 2) % 2 === 0 ? 0.05 : -0.05;
         }
-        let color = shade(SURFACE_COLORS[surface], Math.max(0.6, Math.min(1.35, bright)));
-        // Worn turf browns out.
+        // Texture fill tinted by lighting; worn turf browns the tint.
         const wear = t.wearAt(x, y);
-        if (wear > 0.03) color = mix(color, WEAR_COLOR, Math.min(0.7, wear * 0.75));
+        let tint = shade(0xffffff, Math.max(0.6, Math.min(1.35, bright)));
+        if (wear > 0.03) tint = mix(tint, WEAR_COLOR, Math.min(0.75, wear * 0.8));
+        const fill = this.textures.surfaces[surface];
+        const style = { texture: fill.texture, matrix: fill.matrix, color: tint };
 
         // Split the quad along NW-SE so saddle tiles render correctly.
-        g.poly([pNW.x, pNW.y, pNE.x, pNE.y, pSE.x, pSE.y]).fill(color);
-        const color2 = nw + se === ne + sw ? color : shade(color, 0.96);
-        g.poly([pNW.x, pNW.y, pSE.x, pSE.y, pSW.x, pSW.y]).fill(color2);
-
-        // Green fringe: a lighter mowed ring reads as a tended green.
-        if (surface === Surface.Green) {
-          const cxm = (pNW.x + pNE.x + pSE.x + pSW.x) / 4;
-          const cym = (pNW.y + pNE.y + pSE.y + pSW.y) / 4;
-          const inset = (p: { x: number; y: number }) => ({ x: p.x + (cxm - p.x) * 0.3, y: p.y + (cym - p.y) * 0.3 });
-          const i0 = inset(pNW);
-          const i1 = inset(pNE);
-          const i2 = inset(pSE);
-          const i3 = inset(pSW);
-          g.poly([i0.x, i0.y, i1.x, i1.y, i2.x, i2.y, i3.x, i3.y]).fill(shade(color, 1.06));
+        g.poly([pNW.x, pNW.y, pNE.x, pNE.y, pSE.x, pSE.y]).fill(style);
+        if (nw + se === ne + sw) {
+          g.poly([pNW.x, pNW.y, pSE.x, pSE.y, pSW.x, pSW.y]).fill(style);
+        } else {
+          g.poly([pNW.x, pNW.y, pSE.x, pSE.y, pSW.x, pSW.y]).fill({ ...style, color: shade(tint, 0.96) });
         }
 
-        // Sand speckling.
-        if (surface === Surface.Sand) {
-          for (let s = 0; s < 3; s++) {
-            const u = hash2(x * 3 + s, y);
-            const v = hash2(x, y * 3 + s);
-            const px = pNW.x + (pSE.x - pNW.x) * u * 0.8 + (pNE.x - pSW.x) * (v - 0.5) * 0.4;
-            const py = pNW.y + (pSE.y - pNW.y) * (0.15 + v * 0.7);
-            g.circle(px, py, 1.1).fill(shade(color, 0.82));
+        // Grass tufts & wildflowers scattered over the rough.
+        if (surface === Surface.Rough) {
+          const h1 = hash2(x, y);
+          if (h1 > 0.55) {
+            const u = hash2(x + 31, y);
+            const v = hash2(x, y + 57);
+            const px = pSW.x + (pNE.x - pSW.x) * (0.2 + u * 0.6);
+            const py = pNW.y + (pSE.y - pNW.y) * (0.25 + v * 0.5);
+            const tuftC = shade(0x5c8a3e, 0.9 + u * 0.3);
+            for (let b = -1; b <= 1; b++) {
+              g.moveTo(px + b * 1.6, py).lineTo(px + b * 2.4, py - 3.2 - u * 1.5).stroke({ color: tuftC, width: 1 });
+            }
+            if (h1 > 0.965) g.circle(px + 1, py - 4, 1.1).fill(v > 0.5 ? 0xf0e04e : 0xf0f0f0);
           }
         }
 
-        // Wet-sand shoreline strips along edges bordering water.
+        // Transition bands where turf types meet, and wet-sand shorelines.
         const edges: Array<[number, number, { x: number; y: number }, { x: number; y: number }]> = [
           [x, y - 1, pNW, pNE],
           [x + 1, y, pNE, pSE],
           [x, y + 1, pSE, pSW],
           [x - 1, y, pSW, pNW],
         ];
+        const cxm = (pNW.x + pSE.x) / 2;
+        const cym = (pNW.y + pSE.y) / 2;
+        const band = (a: { x: number; y: number }, b: { x: number; y: number }, depth: number, color: number, alpha: number) => {
+          const ia = { x: a.x + (cxm - a.x) * depth, y: a.y + (cym - a.y) * depth };
+          const ib = { x: b.x + (cxm - b.x) * depth, y: b.y + (cym - b.y) * depth };
+          g.poly([a.x, a.y, b.x, b.y, ib.x, ib.y, ia.x, ia.y]).fill({ color, alpha });
+        };
         for (const [nx, ny, a, b] of edges) {
-          if (!t.inBounds(nx, ny) || t.surfaceAt(nx, ny) !== Surface.Water) continue;
-          const cxm = (pNW.x + pSE.x) / 2;
-          const cym = (pNW.y + pSE.y) / 2;
-          const ia = { x: a.x + (cxm - a.x) * 0.18, y: a.y + (cym - a.y) * 0.18 };
-          const ib = { x: b.x + (cxm - b.x) * 0.18, y: b.y + (cym - b.y) * 0.18 };
-          g.poly([a.x, a.y, b.x, b.y, ib.x, ib.y, ia.x, ia.y]).fill(SHORE_COLOR);
+          if (!t.inBounds(nx, ny)) continue;
+          const n = t.surfaceAt(nx, ny);
+          if (n === Surface.Water) {
+            band(a, b, 0.18, SHORE_COLOR, 1);
+          } else if (surface === Surface.Fairway && n === Surface.Rough) {
+            // Semi-rough: a darker mown collar on the fairway edge.
+            band(a, b, 0.14, 0x4e7834, 0.4);
+          } else if (surface === Surface.Green && n !== Surface.Green) {
+            // Fringe collar around the green.
+            band(a, b, 0.16, 0x86ba52, 0.75);
+          }
         }
 
         // Map border skirt.
@@ -186,15 +200,33 @@ export class TerrainLayer {
     const p1 = worldToScreen(x + 1, y, level);
     const p2 = worldToScreen(x + 1, y + 1, level);
     const p3 = worldToScreen(x, y + 1, level);
-    const deep = shade(SURFACE_COLORS[Surface.Water], 0.92 + tileNoise(x, y));
-    wg.poly([p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y]).fill(deep);
+    const fill = this.textures.surfaces[Surface.Water];
+    const tint = shade(0xffffff, 0.94 + tileNoise(x, y));
+    wg.poly([p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y]).fill({ texture: fill.texture, matrix: fill.matrix, color: tint });
+
+    // Lighter shallows along shores.
+    const cxm = (p0.x + p2.x) / 2;
+    const cym = (p0.y + p2.y) / 2;
+    const edges: Array<[number, number, { x: number; y: number }, { x: number; y: number }]> = [
+      [x, y - 1, p0, p1],
+      [x + 1, y, p1, p2],
+      [x, y + 1, p2, p3],
+      [x - 1, y, p3, p0],
+    ];
+    for (const [nx, ny, a, b] of edges) {
+      if (!t.inBounds(nx, ny) || t.surfaceAt(nx, ny) === Surface.Water) continue;
+      const ia = { x: a.x + (cxm - a.x) * 0.3, y: a.y + (cym - a.y) * 0.3 };
+      const ib = { x: b.x + (cxm - b.x) * 0.3, y: b.y + (cym - b.y) * 0.3 };
+      wg.poly([a.x, a.y, b.x, b.y, ib.x, ib.y, ia.x, ia.y]).fill({ color: 0x6cb2dc, alpha: 0.45 });
+    }
+
     // A couple of static wave glints; the layer tint animates them.
-    if (hash2(x, y) > 0.4) {
+    if (hash2(x, y) > 0.45) {
       const u = 0.2 + hash2(x + 9, y) * 0.5;
       const v = 0.25 + hash2(x, y + 7) * 0.5;
       const wx = p0.x + (p2.x - p0.x) * u + (p1.x - p3.x) * (v - 0.5) * 0.5;
       const wy = p0.y + (p2.y - p0.y) * v;
-      wg.moveTo(wx - 4, wy).quadraticCurveTo(wx, wy - 2.5, wx + 4, wy).stroke({ color: 0x9cd8f0, width: 1, alpha: 0.7 });
+      wg.moveTo(wx - 4, wy).quadraticCurveTo(wx, wy - 2.5, wx + 4, wy).stroke({ color: 0xaee0f4, width: 1.2, alpha: 0.8 });
     }
   }
 }
