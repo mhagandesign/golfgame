@@ -291,9 +291,9 @@ const SURFACE_FILE_NAMES: Record<Surface, string> = {
  */
 const PROP_OVERRIDES: Record<string, { ax?: number; ay: number; scale: number; shadow?: number }> = {
   'clubhouse-0': { ax: 0.413, ay: 0.775, scale: 0.52 },
-  'drinks-0': { ax: 0.405, ay: 0.799, scale: 0.21 },
-  'snacks-0': { ax: 0.405, ay: 0.786, scale: 0.21 },
-  'toilet-0': { ax: 0.405, ay: 0.774, scale: 0.21 },
+  'drinks-0': { ax: 0.462, ay: 0.784, scale: 0.2 },
+  'snacks-0': { ax: 0.462, ay: 0.784, scale: 0.2 },
+  'toilet-0': { ax: 0.462, ay: 0.784, scale: 0.2 },
   // Photoreal Poly Haven deciduous trees (CC0).
   'tree-0': { ax: 0.564, ay: 0.948, scale: 0.17, shadow: 0.34 }, // full parkland
   'tree-1': { ax: 0.698, ay: 0.919, scale: 0.17, shadow: 0.34 }, // gnarled
