@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { Application, ColorMatrixFilter, Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { GameTextures } from './textures';
 import { Game } from '../core/game';
 import { Camera } from './camera';
@@ -69,6 +69,14 @@ export class Renderer {
     this.world.addChild(this.sceneLayer.container);
     this.world.addChild(this.highlight);
     this.app.stage.addChild(this.world);
+
+    // Subtle diorama grade over the whole scene: ease the saturation, add a
+    // touch of contrast and lift — a cohesive studio-lit tone, not a filter.
+    const grade = new ColorMatrixFilter();
+    grade.saturate(-0.08, false);
+    grade.brightness(1.03, true);
+    grade.contrast(0.05, true);
+    this.world.filters = [grade];
 
     // Soft painterly vignette over the whole scene.
     const vc = document.createElement('canvas');
